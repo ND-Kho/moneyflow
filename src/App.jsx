@@ -15,58 +15,6 @@ import {
   MonthlyBarChart,
 } from "./components/FinanceCharts";
 
-const initialTransactions = [
-  {
-    id: 1,
-    title: "Ăn trưa",
-    note: "Cơm trưa tại trường",
-    category: "Ăn uống",
-    date: "2026-05-31",
-    amount: 45000,
-    type: "expense",
-    icon: "🍜",
-  },
-  {
-    id: 2,
-    title: "Lương làm thêm",
-    note: "Thu nhập tháng này",
-    category: "Làm thêm",
-    date: "2026-05-30",
-    amount: 2500000,
-    type: "income",
-    icon: "💼",
-  },
-  {
-    id: 3,
-    title: "Đổ xăng",
-    note: "Di chuyển trong tuần",
-    category: "Di chuyển",
-    date: "2026-05-29",
-    amount: 80000,
-    type: "expense",
-    icon: "⛽",
-  },
-  {
-    id: 4,
-    title: "Mua sách",
-    note: "Tài liệu học tập",
-    category: "Học tập",
-    date: "2026-05-27",
-    amount: 180000,
-    type: "expense",
-    icon: "📘",
-  },
-  {
-    id: 5,
-    title: "Xem phim",
-    note: "Giải trí cuối tuần",
-    category: "Giải trí",
-    date: "2026-05-25",
-    amount: 120000,
-    type: "expense",
-    icon: "🎬",
-  },
-];
 
 function formatCurrency(amount) {
   return new Intl.NumberFormat("vi-VN", {
@@ -584,68 +532,6 @@ function resetFilters() {
   setSearchTerm("");
   setTypeFilter("all");
   setCategoryFilter("all");
-}
-
-async function resetSampleData() {
-  const confirmed = window.confirm(
-    "Bạn có chắc chắn muốn khôi phục dữ liệu mẫu không? Dữ liệu hiện tại của bạn sẽ bị xóa."
-  );
-
-  if (!confirmed) {
-    return;
-  }
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    alert("Bạn cần đăng nhập trước khi khôi phục dữ liệu mẫu.");
-    return;
-  }
-
-  const { error: deleteError } = await supabase
-    .from("transactions")
-    .delete()
-    .eq("user_id", user.id);
-
-  if (deleteError) {
-    console.error("Lỗi xóa dữ liệu cũ:", deleteError);
-    alert(`Không thể xóa dữ liệu cũ: ${deleteError.message}`);
-    return;
-  }
-
-  const sampleTransactions = initialTransactions.map((transaction) => ({
-    user_id: user.id,
-    title: transaction.title,
-    note: transaction.note || "",
-    category: transaction.category,
-    transaction_date: transaction.date,
-    amount: Number(transaction.amount),
-    type: transaction.type,
-    icon: transaction.icon || "💰",
-  }));
-
-  const { data, error: insertError } = await supabase
-    .from("transactions")
-    .insert(sampleTransactions)
-    .select();
-
-  if (insertError) {
-    console.error("Lỗi thêm dữ liệu mẫu:", insertError);
-    alert(`Không thể khôi phục dữ liệu mẫu: ${insertError.message}`);
-    return;
-  }
-
-  const mappedTransactions = (data || []).map((item) => ({
-    ...item,
-    date: item.transaction_date,
-  }));
-
-  setTransactions(mappedTransactions);
-  resetFilters();
-
-  alert("Đã khôi phục dữ liệu mẫu thành công.");
 }
 
 async function handleSaveBudget() {
