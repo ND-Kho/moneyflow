@@ -614,13 +614,6 @@ if (!session) {
             <h1>Tổng quan tài chính</h1>
 <span>Theo dõi thu nhập, chi tiêu và ngân sách của bạn.</span>          </div>
           <div className="topbar-actions">
-  <button
-    className="reset-data-button"
-    type="button"
-    onClick={resetSampleData}
-  >
-    Khôi phục dữ liệu mẫu
-  </button>
 
 <select
   className="month-button"
