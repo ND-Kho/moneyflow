@@ -15,6 +15,9 @@ function TransactionTable({
   transactions,
   onEdit,
   onDelete,
+  onViewReceipt,
+  onExport,
+  isExporting,
 }) {
   return (
     <section className="panel transaction-panel">
@@ -24,9 +27,20 @@ function TransactionTable({
     <p>Các khoản thu và chi phù hợp với bộ lọc hiện tại</p>
   </div>
 
-  <span className="transaction-count">
-    {transactions.length} giao dịch
-  </span>
+  <div className="transaction-header-actions">
+    <span className="transaction-count">
+      {transactions.length} giao dịch
+    </span>
+
+    <button
+      className="export-button"
+      type="button"
+      onClick={onExport}
+      disabled={transactions.length === 0 || isExporting}
+    >
+      {isExporting ? "Đang xuất..." : "Xuất Excel"}
+    </button>
+  </div>
 </div>
 
       <div className="table-wrapper">
@@ -78,6 +92,16 @@ function TransactionTable({
 
                 <td>
                   <div className="table-actions">
+                    {transaction.receipt_path && (
+                      <button
+                        className="receipt-button"
+                        type="button"
+                        onClick={() => onViewReceipt(transaction.receipt_path)}
+                      >
+                        Hóa đơn
+                      </button>
+                    )}
+
                     <button
                       className="edit-button"
                       type="button"

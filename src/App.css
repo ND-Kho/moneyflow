@@ -603,6 +603,114 @@ th {
   box-shadow: 0 0 0 3px rgba(104, 115, 238, 0.12);
 }
 
+.transaction-form input[aria-invalid="true"],
+.transaction-form select[aria-invalid="true"],
+.transaction-form textarea[aria-invalid="true"] {
+  border-color: #e87979;
+}
+
+.field-error {
+  color: #c94f4f;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.field-hint {
+  color: #8993a4;
+  font-size: 11px;
+  font-weight: 500;
+  text-align: right;
+}
+
+.form-submit-error {
+  border-radius: 9px;
+  padding: 10px 12px;
+  background: #fff0f0;
+  color: #c94f4f;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.transaction-form button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.receipt-upload input[type="file"] {
+  padding: 9px;
+  background: #f8f9fb;
+}
+
+.receipt-hint {
+  text-align: left;
+}
+
+.receipt-selection {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-radius: 9px;
+  padding: 9px 11px;
+  background: #eef1ff;
+  color: #5662d8;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.receipt-selection span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.receipt-selection button {
+  flex: 0 0 auto;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.existing-receipt {
+  background: #edf8f2;
+  color: #24845d;
+}
+
+.ocr-button {
+  border: 1px solid #cfd4ff;
+  border-radius: 9px;
+  padding: 10px 12px;
+  background: #f2f3ff;
+  color: #5662d8;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.ocr-button:hover:not(:disabled) {
+  background: #e8eaff;
+}
+
+.ocr-result {
+  border: 1px solid #bde7d2;
+  border-radius: 10px;
+  padding: 11px 12px;
+  background: #edf9f3;
+  color: #216e50;
+}
+
+.ocr-result strong {
+  font-size: 13px;
+}
+
+.ocr-result p {
+  margin-top: 4px;
+  color: #4f806c;
+  font-size: 12px;
+  font-weight: 500;
+}
+
 .type-switch {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -666,7 +774,8 @@ th {
 }
 
 .edit-button,
-.delete-button {
+.delete-button,
+.receipt-button {
   border: 0;
   border-radius: 8px;
   padding: 7px 10px;
@@ -684,8 +793,14 @@ th {
   color: #d7684d;
 }
 
+.receipt-button {
+  background: #e9f8f1;
+  color: #24845d;
+}
+
 .edit-button:hover,
-.delete-button:hover {
+.delete-button:hover,
+.receipt-button:hover {
   opacity: 0.82;
 }
 
@@ -724,7 +839,7 @@ th {
 
 .filter-grid {
   display: grid;
-  grid-template-columns: minmax(240px, 1fr) 170px 190px;
+  grid-template-columns: minmax(240px, 1fr) 150px 170px 150px 150px;
   gap: 12px;
   margin-top: 18px;
 }
@@ -745,7 +860,8 @@ th {
 }
 
 .search-box input,
-.filter-grid select {
+.filter-grid select,
+.date-filter input {
   width: 100%;
   border: 1px solid #dfe4ec;
   border-radius: 10px;
@@ -763,9 +879,29 @@ th {
 }
 
 .search-box:focus-within,
-.filter-grid select:focus {
+.filter-grid select:focus,
+.date-filter input:focus {
   border-color: #7a84f2;
   box-shadow: 0 0 0 3px rgba(104, 115, 238, 0.12);
+}
+
+.date-filter {
+  display: grid;
+  gap: 5px;
+  color: #667085;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.date-filter input {
+  padding: 10px 11px;
+}
+
+.filter-error {
+  margin-top: 10px;
+  color: #c94f4f;
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .reset-filter-button {
@@ -786,6 +922,37 @@ th {
   color: #7d8798;
   font-size: 13px;
   font-weight: 700;
+}
+
+.transaction-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.export-button {
+  border: 0;
+  border-radius: 9px;
+  padding: 9px 13px;
+  background: #e9ecff;
+  color: #5662d8;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.export-button:hover:not(:disabled) {
+  background: #dfe3ff;
+}
+
+.export-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+@media (max-width: 1200px) {
+  .filter-grid {
+    grid-template-columns: minmax(220px, 1fr) 1fr 1fr;
+  }
 }
 
 @media (max-width: 820px) {

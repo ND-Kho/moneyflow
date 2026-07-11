@@ -2,15 +2,24 @@ function TransactionFilters({
   searchTerm,
   typeFilter,
   categoryFilter,
+  startDate,
+  endDate,
+  hasInvalidDateRange,
   categories,
   resultCount,
   onSearchChange,
   onTypeChange,
   onCategoryChange,
+  onStartDateChange,
+  onEndDateChange,
   onReset,
 }) {
   const hasActiveFilters =
-    searchTerm || typeFilter !== "all" || categoryFilter !== "all";
+    searchTerm ||
+    typeFilter !== "all" ||
+    categoryFilter !== "all" ||
+    startDate ||
+    endDate;
 
   return (
     <section className="panel filter-panel">
@@ -66,7 +75,33 @@ function TransactionFilters({
             </option>
           ))}
         </select>
+
+        <label className="date-filter">
+          <span>Từ ngày</span>
+          <input
+            type="date"
+            value={startDate}
+            max={endDate || undefined}
+            onChange={(event) => onStartDateChange(event.target.value)}
+          />
+        </label>
+
+        <label className="date-filter">
+          <span>Đến ngày</span>
+          <input
+            type="date"
+            value={endDate}
+            min={startDate || undefined}
+            onChange={(event) => onEndDateChange(event.target.value)}
+          />
+        </label>
       </div>
+
+      {hasInvalidDateRange && (
+        <p className="filter-error" role="alert">
+          Ngày bắt đầu phải trước hoặc bằng ngày kết thúc.
+        </p>
+      )}
     </section>
   );
 }

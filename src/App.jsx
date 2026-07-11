@@ -40,6 +40,239 @@ function formatMonthLabel(monthKey) {
   return `Tháng ${month} / ${year}`;
 }
 
+function isValidDate(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return false;
+  }
+
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+
+  return (
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day
+  );
+}
+
+function isValidTransaction(transaction) {
+  const amount = Number(transaction.amount);
+  const title = String(transaction.title || "").trim();
+  const note = String(transaction.note || "").trim();
+  const date = String(transaction.date || "");
+
+  return (
+    title.length > 0 &&
+    title.length <= 100 &&
+    note.length <= 500 &&
+    Number.isFinite(amount) &&
+    amount > 0 &&
+    /^(income|expense)$/.test(transaction.type) &&
+    Boolean(transaction.category) &&
+    isValidDate(date)
+  );
+}
+
+const RECEIPTS_BUCKET = "receipts";
+const MAX_RECEIPT_SIZE = 5 * 1024 * 1024;
+const ALLOWED_RECEIPT_TYPES = ["image/jpeg", "image/png", "image/webp"];
+
+function isValidReceiptFile(file) {
+  return (
+    !file ||
+    (ALLOWED_RECEIPT_TYPES.includes(file.type) &&
+      file.size > 0 &&
+      file.size <= MAX_RECEIPT_SIZE)
+  );
+}
+
+function getReceiptExtension(file) {
+  const extensions = {
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+  };
+
+  return extensions[file.type];
+}
+
+async function uploadReceipt(userId, transactionId, file) {
+  const extension = getReceiptExtension(file);
+  const path = `${userId}/${transactionId}/${crypto.randomUUID()}.${extension}`;
+  const { error } = await supabase.storage
+    .from(RECEIPTS_BUCKET)
+    .upload(path, file, {
+      cacheControl: "3600",
+      contentType: file.type,
+      upsert: false,
+    });
+
+  if (error) {
+    throw error;
+  }
+
+  return path;
+}
+
+async function removeReceipt(path) {
+  if (!path) {
+    return;
+  }
+
+  const { error } = await supabase.storage
+    .from(RECEIPTS_BUCKET)
+    .remove([path]);
+
+  if (error) {
+    console.error("Không thể xóa ảnh hóa đơn:", error);
+  }
+}
+
+async function exportTransactionsToExcel(transactionsToExport) {
+  const { default: ExcelJS } = await import("exceljs");
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet("Giao dịch", {
+    views: [{ state: "frozen", ySplit: 4, showGridLines: false }],
+    pageSetup: {
+      orientation: "landscape",
+      fitToPage: true,
+      fitToWidth: 1,
+      fitToHeight: 0,
+    },
+  });
+
+  workbook.creator = "MoneyFlow";
+  workbook.created = new Date();
+  workbook.modified = new Date();
+
+  worksheet.mergeCells("A1:G1");
+  worksheet.getCell("A1").value = "BÁO CÁO GIAO DỊCH MONEYFLOW";
+  worksheet.getCell("A1").font = {
+    name: "Arial",
+    size: 16,
+    bold: true,
+    color: { argb: "FFFFFFFF" },
+  };
+  worksheet.getCell("A1").fill = {
+    type: "pattern",
+    pattern: "solid",
+    fgColor: { argb: "FF5662D8" },
+  };
+  worksheet.getCell("A1").alignment = {
+    horizontal: "center",
+    vertical: "middle",
+  };
+  worksheet.getRow(1).height = 30;
+
+  worksheet.mergeCells("A2:G2");
+  worksheet.getCell("A2").value =
+    `Xuất lúc ${new Intl.DateTimeFormat("vi-VN", {
+      dateStyle: "short",
+      timeStyle: "short",
+    }).format(new Date())} • ${transactionsToExport.length} giao dịch`;
+  worksheet.getCell("A2").font = {
+    name: "Arial",
+    size: 10,
+    italic: true,
+    color: { argb: "FF667085" },
+  };
+  worksheet.getCell("A2").alignment = { horizontal: "center" };
+
+  const rows = transactionsToExport.map((transaction) => {
+    const [year, month, day] = transaction.date.split("-").map(Number);
+
+    return [
+      new Date(year, month - 1, day),
+      transaction.type === "income" ? "Khoản thu" : "Khoản chi",
+      transaction.title,
+      transaction.category,
+      Number(transaction.amount),
+      transaction.note || "",
+      transaction.receipt_path ? "Có" : "Không",
+    ];
+  });
+
+  worksheet.addTable({
+    name: "MoneyFlowTransactions",
+    ref: "A4",
+    headerRow: true,
+    totalsRow: false,
+    style: {
+      theme: "TableStyleMedium2",
+      showRowStripes: true,
+      showColumnStripes: false,
+    },
+    columns: [
+      { name: "Ngày", filterButton: true },
+      { name: "Loại", filterButton: true },
+      { name: "Nội dung", filterButton: true },
+      { name: "Danh mục", filterButton: true },
+      { name: "Số tiền", filterButton: true },
+      { name: "Ghi chú", filterButton: true },
+      { name: "Hóa đơn", filterButton: true },
+    ],
+    rows,
+  });
+
+  const columnWidths = [14, 15, 28, 18, 18, 36, 12];
+  columnWidths.forEach((width, index) => {
+    worksheet.getColumn(index + 1).width = width;
+  });
+
+  worksheet.getRow(4).height = 24;
+  worksheet.getRow(4).alignment = {
+    horizontal: "center",
+    vertical: "middle",
+  };
+
+  for (let rowNumber = 5; rowNumber < rows.length + 5; rowNumber += 1) {
+    worksheet.getCell(`A${rowNumber}`).numFmt = "dd/mm/yyyy";
+    worksheet.getCell(`A${rowNumber}`).alignment = { horizontal: "center" };
+    worksheet.getCell(`B${rowNumber}`).alignment = { horizontal: "center" };
+    worksheet.getCell(`E${rowNumber}`).numFmt = '#,##0 "VND"';
+    worksheet.getCell(`E${rowNumber}`).alignment = { horizontal: "right" };
+    worksheet.getCell(`F${rowNumber}`).alignment = {
+      vertical: "top",
+      wrapText: true,
+    };
+    worksheet.getCell(`G${rowNumber}`).alignment = { horizontal: "center" };
+  }
+
+  if (rows.length > 0) {
+    const lastRow = rows.length + 4;
+
+    worksheet.addConditionalFormatting({
+      ref: `E5:E${lastRow}`,
+      rules: [
+        {
+          type: "expression",
+          formulae: ['$B5="Khoản thu"'],
+          style: { font: { color: { argb: "FF15803D" } } },
+        },
+        {
+          type: "expression",
+          formulae: ['$B5="Khoản chi"'],
+          style: { font: { color: { argb: "FFDC2626" } } },
+        },
+      ],
+    });
+  }
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+  const downloadUrl = URL.createObjectURL(blob);
+  const downloadLink = document.createElement("a");
+
+  downloadLink.href = downloadUrl;
+  downloadLink.download = `moneyflow-${new Date().toISOString().slice(0, 10)}.xlsx`;
+  document.body.appendChild(downloadLink);
+  downloadLink.click();
+  downloadLink.remove();
+  URL.revokeObjectURL(downloadUrl);
+}
+
 
 
 function App() {
@@ -53,6 +286,9 @@ const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
 const [typeFilter, setTypeFilter] = useState("all");
 const [categoryFilter, setCategoryFilter] = useState("all");
+const [startDateFilter, setStartDateFilter] = useState("");
+const [endDateFilter, setEndDateFilter] = useState("");
+const [isExporting, setIsExporting] = useState(false);
 
 const [selectedMonth, setSelectedMonth] = useState("");
 const [monthlyBudgetLimit, setMonthlyBudgetLimit] = useState(10000000);
@@ -142,6 +378,8 @@ const fetchMonthlyBudget = async (monthKey) => {
 
 useEffect(() => {
   if (session && selectedMonth) {
+    // Budget is loaded from Supabase after the selected month changes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchMonthlyBudget(selectedMonth);
   }
 }, [session, selectedMonth]);
@@ -172,6 +410,8 @@ useEffect(() => {
 
 useEffect(() => {
   if (transactions.length === 0) {
+    // Keep the month selector consistent with the available transaction data.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSelectedMonth("");
     return;
   }
@@ -190,6 +430,8 @@ useEffect(() => {
 
 useEffect(() => {
   if (session) {
+    // Transaction state is populated asynchronously from Supabase.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchTransactions();
   } else {
     setTransactions([]);
@@ -229,9 +471,30 @@ const selectedMonthTransactions = transactions.filter(
   (transaction) => getMonthKey(transaction.date) === selectedMonth
 );
 
-const dashboardTransactions = selectedMonth
+const hasDateRange = Boolean(startDateFilter || endDateFilter);
+const hasInvalidDateRange = Boolean(
+  startDateFilter && endDateFilter && startDateFilter > endDateFilter
+);
+const dateRangeTransactions = hasInvalidDateRange
+  ? []
+  : transactions.filter((transaction) => {
+      const matchesStartDate =
+        !startDateFilter || transaction.date >= startDateFilter;
+      const matchesEndDate =
+        !endDateFilter || transaction.date <= endDateFilter;
+
+      return matchesStartDate && matchesEndDate;
+    });
+
+const dashboardTransactions = hasDateRange
+  ? dateRangeTransactions
+  : selectedMonth
   ? selectedMonthTransactions
   : transactions;
+
+const activePeriodLabel = hasDateRange
+  ? `${startDateFilter || "đầu kỳ"} đến ${endDateFilter || "hiện tại"}`
+  : formatMonthLabel(selectedMonth);
 
 const totalIncome = dashboardTransactions
   .filter((transaction) => transaction.type === "income")
@@ -250,21 +513,12 @@ const totalExpense = dashboardTransactions
 const balance = totalIncome - totalExpense;
 
 
-const selectedMonthIncome = selectedMonthTransactions
-  .filter((transaction) => transaction.type === "income")
-  .reduce(
-    (sum, transaction) => sum + Number(transaction.amount),
-    0
-  );
-
 const selectedMonthExpense = selectedMonthTransactions
   .filter((transaction) => transaction.type === "expense")
   .reduce(
     (sum, transaction) => sum + Number(transaction.amount),
     0
   );
-
-const selectedMonthBalance = selectedMonthIncome - selectedMonthExpense;
 
 const selectedMonthBudgetPercent =
   monthlyBudgetLimit > 0
@@ -335,7 +589,12 @@ const monthlyData = Object.values(
   .sort((firstMonth, secondMonth) =>
     firstMonth.monthKey.localeCompare(secondMonth.monthKey)
   )
-  .map(({ monthKey, ...monthData }) => monthData);
+  .slice(-6)
+  .map((monthData) => ({
+    month: monthData.month,
+    income: monthData.income,
+    expense: monthData.expense,
+  }));
 
   const expenseCategoryData = Object.values(
   dashboardTransactions
@@ -412,10 +671,41 @@ async function handleSaveTransaction(transaction) {
 
   if (!user) {
     alert("Bạn cần đăng nhập trước khi lưu giao dịch.");
-    return;
+    return false;
+  }
+
+  if (!isValidTransaction(transaction)) {
+    alert("Dữ liệu giao dịch không hợp lệ. Vui lòng kiểm tra lại.");
+    return false;
+  }
+
+  if (!isValidReceiptFile(transaction.receiptFile)) {
+    alert("Ảnh hóa đơn phải là JPG, PNG hoặc WebP và không vượt quá 5 MB.");
+    return false;
   }
 
   if (editingTransaction) {
+    let uploadedReceiptPath = null;
+
+    if (transaction.receiptFile) {
+      try {
+        uploadedReceiptPath = await uploadReceipt(
+          user.id,
+          editingTransaction.id,
+          transaction.receiptFile
+        );
+      } catch (uploadError) {
+        console.error("Lỗi tải ảnh hóa đơn:", uploadError);
+        alert(`Tải ảnh hóa đơn thất bại: ${uploadError.message}`);
+        return false;
+      }
+    }
+
+    const nextReceiptPath = uploadedReceiptPath
+      ? uploadedReceiptPath
+      : transaction.removeReceipt
+      ? null
+      : editingTransaction.receipt_path || null;
     const { data, error } = await supabase
       .from("transactions")
       .update({
@@ -425,6 +715,12 @@ async function handleSaveTransaction(transaction) {
         transaction_date: transaction.date,
         amount: Number(transaction.amount),
         type: transaction.type,
+        icon: transaction.icon || "💳",
+        receipt_path: nextReceiptPath,
+        receipt_ocr_confidence:
+          transaction.receiptOcrConfidence ?? null,
+        receipt_ocr_processed_at:
+          transaction.receiptOcrProcessedAt ?? null,
       })
       .eq("id", editingTransaction.id)
       .eq("user_id", user.id)
@@ -432,9 +728,17 @@ async function handleSaveTransaction(transaction) {
       .single();
 
     if (error) {
+      await removeReceipt(uploadedReceiptPath);
       console.error("Lỗi cập nhật giao dịch:", error);
       alert(`Cập nhật giao dịch thất bại: ${error.message}`);
-      return;
+      return false;
+    }
+
+    if (
+      editingTransaction.receipt_path &&
+      editingTransaction.receipt_path !== nextReceiptPath
+    ) {
+      await removeReceipt(editingTransaction.receipt_path);
     }
 
     const mappedTransaction = {
@@ -458,6 +762,11 @@ async function handleSaveTransaction(transaction) {
       transaction_date: transaction.date,
       amount: Number(transaction.amount),
       type: transaction.type,
+      icon: transaction.icon || "💳",
+      receipt_ocr_confidence:
+        transaction.receiptOcrConfidence ?? null,
+      receipt_ocr_processed_at:
+        transaction.receiptOcrProcessedAt ?? null,
     };
 
     const { data, error } = await supabase
@@ -469,12 +778,51 @@ async function handleSaveTransaction(transaction) {
     if (error) {
       console.error("Lỗi thêm giao dịch:", error);
       alert(`Thêm giao dịch thất bại: ${error.message}`);
-      return;
+      return false;
+    }
+
+    let savedTransaction = data;
+
+    if (transaction.receiptFile) {
+      let uploadedReceiptPath = null;
+
+      try {
+        uploadedReceiptPath = await uploadReceipt(
+          user.id,
+          data.id,
+          transaction.receiptFile
+        );
+
+        const { data: transactionWithReceipt, error: receiptUpdateError } =
+          await supabase
+            .from("transactions")
+            .update({ receipt_path: uploadedReceiptPath })
+            .eq("id", data.id)
+            .eq("user_id", user.id)
+            .select()
+            .single();
+
+        if (receiptUpdateError) {
+          throw receiptUpdateError;
+        }
+
+        savedTransaction = transactionWithReceipt;
+      } catch (receiptError) {
+        await removeReceipt(uploadedReceiptPath);
+        await supabase
+          .from("transactions")
+          .delete()
+          .eq("id", data.id)
+          .eq("user_id", user.id);
+        console.error("Lỗi lưu ảnh hóa đơn:", receiptError);
+        alert(`Lưu ảnh hóa đơn thất bại: ${receiptError.message}`);
+        return false;
+      }
     }
 
     const mappedTransaction = {
-      ...data,
-      date: data.transaction_date,
+      ...savedTransaction,
+      date: savedTransaction.transaction_date,
     };
 
     setTransactions((currentTransactions) => [
@@ -484,6 +832,7 @@ async function handleSaveTransaction(transaction) {
   }
 
   closeForm();
+  return true;
 }
 
 function handleEditTransaction(transaction) {
@@ -509,6 +858,10 @@ async function handleDeleteTransaction(id) {
     return;
   }
 
+  const transactionToDelete = transactions.find(
+    (transaction) => transaction.id === id
+  );
+
   const { error } = await supabase
     .from("transactions")
     .delete()
@@ -521,6 +874,8 @@ async function handleDeleteTransaction(id) {
     return;
   }
 
+  await removeReceipt(transactionToDelete?.receipt_path);
+
   setTransactions((currentTransactions) =>
     currentTransactions.filter(
       (transaction) => transaction.id !== id
@@ -528,10 +883,47 @@ async function handleDeleteTransaction(id) {
   );
 }
 
+async function handleViewReceipt(path) {
+  const { data, error } = await supabase.storage
+    .from(RECEIPTS_BUCKET)
+    .createSignedUrl(path, 60);
+
+  if (error) {
+    console.error("Lỗi mở ảnh hóa đơn:", error);
+    alert("Không thể mở ảnh hóa đơn. Vui lòng thử lại.");
+    return;
+  }
+
+  const receiptLink = document.createElement("a");
+  receiptLink.href = data.signedUrl;
+  receiptLink.target = "_blank";
+  receiptLink.rel = "noopener noreferrer";
+  receiptLink.click();
+}
+
 function resetFilters() {
   setSearchTerm("");
   setTypeFilter("all");
   setCategoryFilter("all");
+  setStartDateFilter("");
+  setEndDateFilter("");
+}
+
+async function handleExportTransactions() {
+  if (filteredTransactions.length === 0 || isExporting) {
+    return;
+  }
+
+  setIsExporting(true);
+
+  try {
+    await exportTransactionsToExcel(filteredTransactions);
+  } catch (error) {
+    console.error("Lỗi xuất Excel:", error);
+    alert("Không thể xuất file Excel. Vui lòng thử lại.");
+  } finally {
+    setIsExporting(false);
+  }
 }
 
 async function handleSaveBudget() {
@@ -648,21 +1040,21 @@ if (!session) {
           <SummaryCard
   title="Tổng thu nhập"
   value={formatCurrency(totalIncome)}
-  description={`Thu nhập trong ${formatMonthLabel(selectedMonth)}`}
+  description={`Thu nhập trong ${activePeriodLabel}`}
   type="income"
 />
 
 <SummaryCard
   title="Tổng chi tiêu"
   value={formatCurrency(totalExpense)}
-  description={`Chi tiêu trong ${formatMonthLabel(selectedMonth)}`}
+  description={`Chi tiêu trong ${activePeriodLabel}`}
   type="expense"
 />
 
 <SummaryCard
   title="Số dư hiện tại"
   value={formatCurrency(balance)}
-  description={`Thu nhập trừ chi tiêu trong ${formatMonthLabel(selectedMonth)}`}
+  description={`Thu nhập trừ chi tiêu trong ${activePeriodLabel}`}
   type="balance"
 />
         </section>
@@ -725,11 +1117,16 @@ if (!session) {
     searchTerm={searchTerm}
     typeFilter={typeFilter}
     categoryFilter={categoryFilter}
+    startDate={startDateFilter}
+    endDate={endDateFilter}
+    hasInvalidDateRange={hasInvalidDateRange}
     categories={categories}
     resultCount={filteredTransactions.length}
     onSearchChange={setSearchTerm}
     onTypeChange={setTypeFilter}
     onCategoryChange={setCategoryFilter}
+    onStartDateChange={setStartDateFilter}
+    onEndDateChange={setEndDateFilter}
     onReset={resetFilters}
   />
 
@@ -737,6 +1134,9 @@ if (!session) {
     transactions={filteredTransactions}
     onEdit={handleEditTransaction}
     onDelete={handleDeleteTransaction}
+    onViewReceipt={handleViewReceipt}
+    onExport={handleExportTransactions}
+    isExporting={isExporting}
   />
 </section>
       </main>
