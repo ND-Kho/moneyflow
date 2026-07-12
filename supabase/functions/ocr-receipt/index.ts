@@ -10,13 +10,25 @@ const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
 const ALLOWED_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const AZURE_API_VERSION = "2024-11-30";
 const MAX_POLL_ATTEMPTS = 20;
+const MAX_NOTE_LENGTH = 500;
 
 type AzureField = {
   content?: string;
   confidence?: number;
   valueString?: string;
   valueDate?: string;
+  valueNumber?: number;
+  valueInteger?: number;
   valueCurrency?: { amount?: number; currencyCode?: string };
+  valueArray?: AzureField[];
+  valueObject?: Record<string, AzureField>;
+};
+
+type ReceiptItem = {
+  description: string;
+  quantity: number | null;
+  unit_price: number | null;
+  total_price: number | null;
 };
 
 function jsonResponse(body: unknown, status = 200) {
@@ -48,6 +60,76 @@ function wait(milliseconds: number) {
 function fieldText(field?: AzureField) {
   const value = field?.valueString || field?.content;
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function fieldNumber(field?: AzureField) {
+  const value = field?.valueNumber ?? field?.valueInteger ?? field?.valueCurrency?.amount;
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  const content = field?.content?.replace(/[^0-9,.-]/g, "").replace(/,/g, "");
+  const parsed = content ? Number(content) : NaN;
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function extractItems(field?: AzureField): ReceiptItem[] {
+  if (!Array.isArray(field?.valueArray)) {
+    return [];
+  }
+
+  return field.valueArray.flatMap((item) => {
+    const values = item.valueObject;
+    const description = fieldText(values?.Description);
+
+    if (!description) {
+      return [];
+    }
+
+    return [{
+      description,
+      quantity: fieldNumber(values?.Quantity),
+      unit_price: fieldNumber(values?.Price),
+      total_price: fieldNumber(values?.TotalPrice),
+    }];
+  });
+}
+
+function formatItemAmount(value: number, currency?: string | null) {
+  const suffix = currency?.toUpperCase() === "VND" || !currency ? "đ" : ` ${currency}`;
+  return `${new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 2 }).format(value)}${suffix}`;
+}
+
+function buildItemsNote(items: ReceiptItem[], merchant: string | null, currency: string | null) {
+  if (items.length === 0) {
+    return merchant ? `Hóa đơn từ ${merchant}` : "Dữ liệu được đọc từ hóa đơn";
+  }
+
+  const lines = items.map((item) => {
+    const quantity = item.quantity && item.quantity !== 1 ? ` × ${item.quantity}` : "";
+    const price = item.total_price ?? item.unit_price;
+    return `• ${item.description}${quantity}${price !== null ? `: ${formatItemAmount(price, currency)}` : ""}`;
+  });
+  const prefix = `Chi tiết ${items.length} món:\n`;
+  let note = prefix;
+
+  for (const line of lines) {
+    const separator = note === prefix ? "" : "\n";
+
+    if (`${note}${separator}${line}`.length <= MAX_NOTE_LENGTH) {
+      note += `${separator}${line}`;
+      continue;
+    }
+
+    const remaining = MAX_NOTE_LENGTH - note.length;
+    if (remaining > 2) {
+      note = `${note.slice(0, MAX_NOTE_LENGTH - 1).trimEnd()}…`;
+    }
+    break;
+  }
+
+  return note;
 }
 
 function inferCategory(text: string) {
@@ -206,6 +288,7 @@ Deno.serve(async (request) => {
   const date = fields.TransactionDate?.valueDate || fieldText(fields.TransactionDate);
   const amount = fields.Total?.valueCurrency?.amount ?? null;
   const currency = fields.Total?.valueCurrency?.currencyCode || fieldText(fields.TotalCurrencyCode);
+  const items = extractItems(fields.Items);
   const confidenceValues = [fields.MerchantName, fields.TransactionDate, fields.Total]
     .map((field) => field?.confidence)
     .filter((value): value is number => typeof value === "number");
@@ -222,9 +305,10 @@ Deno.serve(async (request) => {
       transaction_date: date,
       amount,
       currency,
+      items,
       suggested_type: "expense",
       suggested_category: inferCategory(searchableText),
-      note: merchant ? `Hóa đơn từ ${merchant}` : "Dữ liệu được đọc từ hóa đơn",
+      note: buildItemsNote(items, merchant, currency),
       confidence: Math.round(confidence * 1000) / 1000,
     },
   });

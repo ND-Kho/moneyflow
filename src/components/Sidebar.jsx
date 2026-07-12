@@ -29,6 +29,16 @@ function Sidebar({ userEmail, onLogout, onNavigate, activeSection }) {
             <span>{item.label}</span>
           </button>
         ))}
+
+        <button
+          type="button"
+          className="nav-item mobile-logout"
+          onClick={onLogout}
+          aria-label="Đăng xuất"
+        >
+          <span>⇥</span>
+          <span>Đăng xuất</span>
+        </button>
       </nav>
 
       <div className="sidebar-user">

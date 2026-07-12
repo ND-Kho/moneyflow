@@ -514,7 +514,9 @@ function TransactionForm({
                     : ""}
                 </strong>
                 <p>
-                  Hãy kiểm tra lại cửa hàng, ngày và tổng tiền trước khi lưu.
+                  {Array.isArray(ocrResult.items) && ocrResult.items.length > 0
+                    ? `Đã nhận diện ${ocrResult.items.length} món. Hãy kiểm tra cửa hàng, danh sách món và tổng tiền trước khi lưu.`
+                    : "Hãy kiểm tra lại cửa hàng, ngày và tổng tiền trước khi lưu."}
                 </p>
               </div>
             )}

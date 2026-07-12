@@ -58,7 +58,7 @@ function TransactionTable({
           <tbody>
             {transactions.map((transaction) => (
               <tr key={transaction.id}>
-                <td>
+                <td data-label="Nội dung">
                   <div className="transaction-name">
                     <div className="transaction-icon">
                       {transaction.icon}
@@ -71,15 +71,16 @@ function TransactionTable({
                   </div>
                 </td>
 
-                <td>
+                <td data-label="Danh mục">
                   <span className="category-badge">
                     {transaction.category}
                   </span>
                 </td>
 
-                <td>{formatDate(transaction.date)}</td>
+                <td data-label="Ngày">{formatDate(transaction.date)}</td>
 
                 <td
+                  data-label="Số tiền"
                   className={
                     transaction.type === "income"
                       ? "amount income-text"
@@ -90,7 +91,7 @@ function TransactionTable({
                   {formatCurrency(transaction.amount)}
                 </td>
 
-                <td>
+                <td data-label="Thao tác">
                   <div className="table-actions">
                     {transaction.receipt_path && (
                       <button

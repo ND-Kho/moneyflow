@@ -1470,3 +1470,363 @@ table tbody tr {
 table tbody tr:hover {
   background: #f8fafc;
 }
+
+/* Mobile and tablet experience */
+
+.mobile-logout {
+  display: none;
+}
+
+@media (max-width: 1000px) {
+  .app-layout {
+    display: block;
+  }
+
+  .sidebar {
+    position: fixed;
+    z-index: 90;
+    inset: auto 0 0;
+    display: block;
+    width: 100%;
+    padding: 8px max(10px, env(safe-area-inset-right))
+      calc(8px + env(safe-area-inset-bottom))
+      max(10px, env(safe-area-inset-left));
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 -10px 30px rgba(15, 23, 42, 0.2);
+  }
+
+  .sidebar-brand,
+  .sidebar-user {
+    display: none;
+  }
+
+  .sidebar-nav {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 4px;
+    margin: 0;
+  }
+
+  .nav-item,
+  .mobile-logout {
+    display: flex;
+    min-width: 0;
+    min-height: 52px;
+    flex-direction: column;
+    justify-content: center;
+    gap: 3px;
+    padding: 6px 3px;
+    border-radius: 10px;
+    font-size: 10px;
+    text-align: center;
+  }
+
+  .nav-item span:first-child {
+    font-size: 19px;
+    line-height: 1;
+  }
+
+  .nav-item:hover {
+    transform: none;
+  }
+
+  .main-content {
+    width: 100%;
+    margin-left: 0;
+    padding-bottom: calc(88px + env(safe-area-inset-bottom));
+  }
+
+  #overview,
+  #transactions,
+  #budget,
+  #statistics {
+    scroll-margin-top: 16px;
+  }
+}
+
+@media (max-width: 760px) {
+  body {
+    min-width: 320px;
+  }
+
+  .main-content {
+    padding: 12px 12px calc(86px + env(safe-area-inset-bottom));
+  }
+
+  .topbar {
+    gap: 18px;
+    padding: 18px;
+    border-radius: 15px;
+  }
+
+  .topbar h1 {
+    font-size: clamp(23px, 7vw, 28px);
+  }
+
+  .topbar span {
+    line-height: 1.5;
+  }
+
+  .topbar-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 9px;
+  }
+
+  .month-button,
+  .primary-button,
+  .reset-data-button {
+    min-width: 0;
+    min-height: 44px;
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+
+  .summary-grid,
+  .overview-grid {
+    gap: 12px;
+  }
+
+  .summary-card,
+  .panel {
+    border-radius: 14px;
+  }
+
+  .summary-card,
+  .panel {
+    padding: 16px;
+  }
+
+  .summary-card h3 {
+    margin-top: 14px;
+    overflow-wrap: anywhere;
+    font-size: 21px;
+  }
+
+  .panel:hover,
+  .summary-card:hover {
+    transform: none;
+  }
+
+  .panel-header,
+  .transaction-header-actions {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .transaction-header-actions {
+    width: 100%;
+    gap: 9px;
+  }
+
+  .export-button {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .filter-grid {
+    gap: 10px;
+  }
+
+  .search-box,
+  .filter-grid select,
+  .date-filter input {
+    min-height: 44px;
+  }
+
+  .chart-box,
+  .pie-chart-box {
+    height: 220px;
+    margin-top: 12px;
+  }
+
+  .pie-chart-layout {
+    gap: 12px;
+  }
+
+  .expense-legend {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .budget-content {
+    padding-top: 24px;
+  }
+
+  .budget-editor {
+    flex-direction: column;
+  }
+
+  .budget-editor input,
+  .budget-editor button {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .table-wrapper {
+    overflow: visible;
+  }
+
+  table {
+    display: block;
+    margin-top: 14px;
+  }
+
+  table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  table tbody,
+  table tr,
+  table td {
+    display: block;
+    width: 100%;
+  }
+
+  table tbody {
+    display: grid;
+    gap: 12px;
+  }
+
+  table tbody tr {
+    padding: 6px 14px;
+    border: 1px solid #e7ebf1;
+    border-radius: 14px;
+    background: #fff;
+  }
+
+  table td {
+    display: grid;
+    grid-template-columns: minmax(78px, 0.38fr) minmax(0, 1fr);
+    align-items: center;
+    gap: 10px;
+    padding: 11px 0;
+    border-top: 1px solid #eef1f5;
+    overflow-wrap: anywhere;
+  }
+
+  table td:first-child {
+    border-top: 0;
+  }
+
+  table td::before {
+    content: attr(data-label);
+    color: #8a94a6;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+
+  .transaction-name {
+    min-width: 0;
+  }
+
+  .transaction-name > div:last-child {
+    min-width: 0;
+  }
+
+  .transaction-name strong,
+  .transaction-name p {
+    overflow-wrap: anywhere;
+  }
+
+  .table-actions {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+  }
+
+  .edit-button,
+  .delete-button,
+  .receipt-button {
+    min-height: 40px;
+    padding: 8px 6px;
+  }
+
+  .empty-message {
+    display: block;
+    padding: 24px 0;
+  }
+
+  .empty-message::before {
+    display: none;
+  }
+
+  .modal-backdrop {
+    align-items: end;
+    padding: 0;
+  }
+
+  .transaction-modal {
+    width: 100%;
+    max-height: 94dvh;
+    border-radius: 20px 20px 0 0;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .modal-header,
+  .transaction-form {
+    padding: 18px;
+  }
+
+  .transaction-form input,
+  .transaction-form select,
+  .transaction-form textarea,
+  .type-switch button,
+  .ocr-button {
+    min-height: 44px;
+    font-size: 16px;
+  }
+
+  .form-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .form-actions button {
+    min-height: 46px;
+    padding: 10px;
+  }
+
+  .auth-form-section {
+    min-height: 100dvh;
+    padding: 16px;
+  }
+
+  .auth-card {
+    gap: 16px;
+    padding: 24px 18px;
+    border-radius: 16px;
+  }
+
+  .auth-card input,
+  .auth-submit-button {
+    min-height: 46px;
+    font-size: 16px;
+  }
+}
+
+@media (max-width: 380px) {
+  .nav-item {
+    font-size: 9px;
+  }
+
+  .nav-item span:first-child {
+    font-size: 17px;
+  }
+
+  .topbar-actions,
+  .form-actions {
+    grid-template-columns: 1fr;
+  }
+
+  table td {
+    grid-template-columns: 70px minmax(0, 1fr);
+  }
+}

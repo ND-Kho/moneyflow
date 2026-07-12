@@ -14,6 +14,8 @@ MoneyFlow là ứng dụng quản lý tài chính cá nhân được xây dựng
   hiệu lực tạm thời và dữ liệu được cô lập theo tài khoản.
 - Dùng Supabase Edge Function và Azure AI Document Intelligence để đọc cửa hàng, ngày, tổng tiền,
   loại và danh mục từ ảnh; người dùng xác nhận trước khi lưu.
+- Hóa đơn nhiều món vẫn được lưu thành một giao dịch theo tổng thanh toán; tên,
+  số lượng và giá từng món được đưa vào ghi chú để tránh làm sai số dư.
 - Biểu đồ cơ cấu chi tiêu và so sánh dòng tiền sáu tháng gần nhất.
 
 ## Kiến trúc cloud
