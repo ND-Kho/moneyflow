@@ -18,6 +18,7 @@ function TransactionTable({
   onViewReceipt,
   onExport,
   isExporting,
+  isLoading = false,
 }) {
   return (
     <section className="panel transaction-panel">
@@ -56,7 +57,12 @@ function TransactionTable({
           </thead>
 
           <tbody>
-            {transactions.map((transaction) => (
+            {isLoading && Array.from({ length: 3 }, (_, index) => (
+              <tr className="table-skeleton-row" key={`skeleton-${index}`}>
+                <td colSpan="5"><div className="skeleton-block"></div></td>
+              </tr>
+            ))}
+            {!isLoading && transactions.map((transaction) => (
               <tr key={transaction.id}>
                 <td data-label="Nội dung">
                   <div className="transaction-name">
@@ -123,7 +129,7 @@ function TransactionTable({
               </tr>
             ))}
 
-            {transactions.length === 0 && (
+            {!isLoading && transactions.length === 0 && (
               <tr>
                 <td className="empty-message" colSpan="5">
                   Chưa có giao dịch nào.

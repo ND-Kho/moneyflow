@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import toast, { Toaster } from "react-hot-toast";
 import "./App.css";
 
 import { supabase } from "./lib/supabase";
@@ -60,6 +61,11 @@ function isValidDate(value) {
   );
 }
 
+function getTodayKey() {
+  const today = new Date();
+  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+}
+
 function isValidTransaction(transaction) {
   const amount = Number(transaction.amount);
   const title = String(transaction.title || "").trim();
@@ -74,7 +80,8 @@ function isValidTransaction(transaction) {
     amount > 0 &&
     /^(income|expense)$/.test(transaction.type) &&
     Boolean(transaction.category) &&
-    isValidDate(date)
+    isValidDate(date) &&
+    date <= getTodayKey()
   );
 }
 
@@ -294,6 +301,8 @@ const [categoryFilter, setCategoryFilter] = useState("all");
 const [startDateFilter, setStartDateFilter] = useState("");
 const [endDateFilter, setEndDateFilter] = useState("");
 const [isExporting, setIsExporting] = useState(false);
+const [isTransactionsLoading, setIsTransactionsLoading] = useState(false);
+const [isBudgetLoading, setIsBudgetLoading] = useState(false);
 
 const [selectedMonth, setSelectedMonth] = useState(getCurrentMonthKey);
 const [monthlyBudgetLimit, setMonthlyBudgetLimit] = useState(0);
@@ -316,12 +325,14 @@ function handleSidebarNavigate(sectionId) {
 }
 
 const fetchTransactions = async () => {
+  setIsTransactionsLoading(true);
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   if (!user) {
     setTransactions([]);
+    setIsTransactionsLoading(false);
     return;
   }
 
@@ -333,7 +344,8 @@ const fetchTransactions = async () => {
 
   if (error) {
     console.error("Lỗi lấy giao dịch:", error);
-    alert(`Không thể tải danh sách giao dịch: ${error.message}`);
+    toast.error("Lỗi kết nối máy chủ, không thể tải giao dịch.");
+    setIsTransactionsLoading(false);
     return;
   }
 
@@ -343,12 +355,15 @@ const fetchTransactions = async () => {
   }));
 
   setTransactions(mappedTransactions);
+  setIsTransactionsLoading(false);
 };
 
 const fetchMonthlyBudget = async (monthKey) => {
+  setIsBudgetLoading(true);
   if (!monthKey) {
     setMonthlyBudgetLimit(0);
     setBudgetInput("");
+    setIsBudgetLoading(false);
     return;
   }
 
@@ -357,6 +372,7 @@ const fetchMonthlyBudget = async (monthKey) => {
   } = await supabase.auth.getUser();
 
   if (!user) {
+    setIsBudgetLoading(false);
     return;
   }
 
@@ -369,17 +385,21 @@ const fetchMonthlyBudget = async (monthKey) => {
 
   if (error) {
     console.error("Lỗi lấy ngân sách tháng:", error);
+    toast.error("Không thể tải ngân sách tháng.");
+    setIsBudgetLoading(false);
     return;
   }
 
   if (!data) {
     setMonthlyBudgetLimit(0);
     setBudgetInput("");
+    setIsBudgetLoading(false);
     return;
   }
 
   setMonthlyBudgetLimit(Number(data.amount));
   setBudgetInput(String(Number(data.amount)));
+  setIsBudgetLoading(false);
 };
 
 useEffect(() => {
@@ -417,6 +437,8 @@ useEffect(() => {
       data: { session: currentSession },
     } = await supabase.auth.getSession();
 
+    setIsTransactionsLoading(Boolean(currentSession));
+    setIsBudgetLoading(Boolean(currentSession));
     setSession(currentSession);
     setIsAuthLoading(false);
   }
@@ -426,6 +448,8 @@ useEffect(() => {
   const {
     data: { subscription },
   } = supabase.auth.onAuthStateChange((_event, currentSession) => {
+    setIsTransactionsLoading(Boolean(currentSession));
+    setIsBudgetLoading(Boolean(currentSession));
     setSession(currentSession);
     setIsAuthLoading(false);
   });
@@ -459,7 +483,7 @@ async function handleLogout() {
   });
 
   if (error) {
-    alert(`Không thể đăng xuất: ${error.message}`);
+    toast.error(`Không thể đăng xuất: ${error.message}`);
   }
 }
 
@@ -534,21 +558,15 @@ const selectedMonthBudgetPercent =
 const budgetStatus =
   selectedMonthBudgetPercent >= 100
     ? {
-        label: "Đã vượt ngân sách",
-        message: "Chi tiêu tháng này đã vượt giới hạn. Bạn nên kiểm tra lại các khoản chi.",
+        label: "Nguy hiểm",
+        message: "Bạn đã chi tiêu vượt ngân sách tháng!",
         className: "danger",
       }
     : selectedMonthBudgetPercent >= 80
     ? {
-        label: "Sắp vượt ngân sách",
-        message: "Chi tiêu đang tiến gần giới hạn ngân sách tháng.",
+        label: "Cảnh báo",
+        message: "Sắp đạt giới hạn ngân sách!",
         className: "warning",
-      }
-    : selectedMonthBudgetPercent >= 50
-    ? {
-        label: "Cần chú ý",
-        message: "Bạn đã sử dụng hơn một nửa ngân sách tháng.",
-        className: "notice",
       }
     : {
         label: "An toàn",
@@ -671,22 +689,24 @@ const filteredTransactions = dashboardTransactions
 }
 
 async function handleSaveTransaction(transaction) {
+  const wasEditing = Boolean(editingTransaction);
+  const expenseBeforeSave = selectedMonthExpense;
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   if (!user) {
-    alert("Bạn cần đăng nhập trước khi lưu giao dịch.");
+    toast.error("Bạn cần đăng nhập trước khi lưu giao dịch.");
     return false;
   }
 
   if (!isValidTransaction(transaction)) {
-    alert("Dữ liệu giao dịch không hợp lệ. Vui lòng kiểm tra lại.");
+    toast.error("Dữ liệu giao dịch không hợp lệ. Vui lòng kiểm tra lại.");
     return false;
   }
 
   if (!isValidReceiptFile(transaction.receiptFile)) {
-    alert("Ảnh hóa đơn phải là JPG, PNG hoặc WebP và không vượt quá 5 MB.");
+    toast.error("Ảnh hóa đơn phải là JPG, PNG hoặc WebP và không vượt quá 5 MB.");
     return false;
   }
 
@@ -702,7 +722,7 @@ async function handleSaveTransaction(transaction) {
         );
       } catch (uploadError) {
         console.error("Lỗi tải ảnh hóa đơn:", uploadError);
-        alert(`Tải ảnh hóa đơn thất bại: ${uploadError.message}`);
+        toast.error(`Tải ảnh hóa đơn thất bại: ${uploadError.message}`);
         return false;
       }
     }
@@ -736,7 +756,7 @@ async function handleSaveTransaction(transaction) {
     if (error) {
       await removeReceipt(uploadedReceiptPath);
       console.error("Lỗi cập nhật giao dịch:", error);
-      alert(`Cập nhật giao dịch thất bại: ${error.message}`);
+      toast.error("Lỗi kết nối máy chủ, không thể cập nhật giao dịch.");
       return false;
     }
 
@@ -783,7 +803,7 @@ async function handleSaveTransaction(transaction) {
 
     if (error) {
       console.error("Lỗi thêm giao dịch:", error);
-      alert(`Thêm giao dịch thất bại: ${error.message}`);
+      toast.error("Lỗi kết nối máy chủ, không thể thêm giao dịch.");
       return false;
     }
 
@@ -821,7 +841,7 @@ async function handleSaveTransaction(transaction) {
           .eq("id", data.id)
           .eq("user_id", user.id);
         console.error("Lỗi lưu ảnh hóa đơn:", receiptError);
-        alert(`Lưu ảnh hóa đơn thất bại: ${receiptError.message}`);
+        toast.error(`Lưu ảnh hóa đơn thất bại: ${receiptError.message}`);
         return false;
       }
     }
@@ -837,7 +857,36 @@ async function handleSaveTransaction(transaction) {
     ]);
   }
 
+  let expenseAfterSave = expenseBeforeSave;
+
+  if (
+    editingTransaction?.type === "expense" &&
+    getMonthKey(editingTransaction.date) === selectedMonth
+  ) {
+    expenseAfterSave -= Number(editingTransaction.amount);
+  }
+
+  if (transaction.type === "expense" && getMonthKey(transaction.date) === selectedMonth) {
+    expenseAfterSave += Number(transaction.amount);
+  }
+
   closeForm();
+  toast.success(
+    wasEditing
+      ? "Đã cập nhật giao dịch trên đám mây thành công!"
+      : "Đã lưu giao dịch lên đám mây thành công!"
+  );
+
+  if (
+    monthlyBudgetLimit > 0 &&
+    expenseBeforeSave < monthlyBudgetLimit &&
+    expenseAfterSave >= monthlyBudgetLimit
+  ) {
+    toast.error("Nguy hiểm: Bạn vừa chi tiêu vượt ngân sách tháng!", {
+      duration: 6000,
+      icon: "⚠️",
+    });
+  }
   return true;
 }
 
@@ -860,7 +909,7 @@ async function handleDeleteTransaction(id) {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    alert("Bạn cần đăng nhập trước khi xóa giao dịch.");
+    toast.error("Bạn cần đăng nhập trước khi xóa giao dịch.");
     return;
   }
 
@@ -876,7 +925,7 @@ async function handleDeleteTransaction(id) {
 
   if (error) {
     console.error("Lỗi xóa giao dịch:", error.message);
-    alert("Xóa giao dịch thất bại.");
+    toast.error("Lỗi kết nối máy chủ, không thể xóa giao dịch.");
     return;
   }
 
@@ -887,6 +936,7 @@ async function handleDeleteTransaction(id) {
       (transaction) => transaction.id !== id
     )
   );
+  toast.success("Đã xóa giao dịch khỏi đám mây.");
 }
 
 async function handleViewReceipt(path) {
@@ -896,7 +946,7 @@ async function handleViewReceipt(path) {
 
   if (error) {
     console.error("Lỗi mở ảnh hóa đơn:", error);
-    alert("Không thể mở ảnh hóa đơn. Vui lòng thử lại.");
+    toast.error("Không thể mở ảnh hóa đơn. Vui lòng thử lại.");
     return;
   }
 
@@ -926,7 +976,7 @@ async function handleExportTransactions() {
     await exportTransactionsToExcel(filteredTransactions);
   } catch (error) {
     console.error("Lỗi xuất Excel:", error);
-    alert("Không thể xuất file Excel. Vui lòng thử lại.");
+    toast.error("Không thể xuất file Excel. Vui lòng thử lại.");
   } finally {
     setIsExporting(false);
   }
@@ -936,12 +986,12 @@ async function handleSaveBudget() {
   const budgetAmount = Number(budgetInput);
 
   if (!selectedMonth) {
-    alert("Bạn cần chọn tháng trước khi lưu ngân sách.");
+    toast.error("Bạn cần chọn tháng trước khi lưu ngân sách.");
     return;
   }
 
   if (!budgetAmount || budgetAmount <= 0) {
-    alert("Ngân sách phải lớn hơn 0.");
+    toast.error("Ngân sách phải lớn hơn 0.");
     return;
   }
 
@@ -950,7 +1000,7 @@ async function handleSaveBudget() {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    alert("Bạn cần đăng nhập trước khi lưu ngân sách.");
+    toast.error("Bạn cần đăng nhập trước khi lưu ngân sách.");
     return;
   }
 
@@ -972,14 +1022,14 @@ async function handleSaveBudget() {
 
   if (error) {
     console.error("Lỗi lưu ngân sách:", error);
-    alert(`Lưu ngân sách thất bại: ${error.message}`);
+    toast.error("Lỗi kết nối máy chủ, không thể lưu ngân sách.");
     return;
   }
 
   setMonthlyBudgetLimit(Number(data.amount));
   setBudgetInput(String(Number(data.amount)));
   setIsBudgetSetupRequired(false);
-  alert("Đã lưu ngân sách tháng.");
+  toast.success("Đã lưu ngân sách tháng lên đám mây.");
 }
 
 if (isAuthLoading) {
@@ -999,6 +1049,10 @@ if (!session) {
 
   return (
     <div className="app-layout">
+<Toaster
+  position="top-right"
+  toastOptions={{ duration: 3500, style: { borderRadius: "12px", maxWidth: "420px" } }}
+/>
 <Sidebar
   userEmail={session.user.email}
   onLogout={handleLogout}
@@ -1043,7 +1097,17 @@ if (!session) {
 </div>
         </header>
 
-        <section id="overview" className="summary-grid">
+        {isTransactionsLoading ? (
+          <section id="overview" className="summary-grid" aria-label="Đang tải tổng quan">
+            {Array.from({ length: 3 }, (_, index) => (
+              <article className="summary-card summary-skeleton" key={index}>
+                <div className="skeleton-block skeleton-label"></div>
+                <div className="skeleton-block skeleton-value"></div>
+                <div className="skeleton-block skeleton-description"></div>
+              </article>
+            ))}
+          </section>
+        ) : <section id="overview" className="summary-grid">
           <SummaryCard
   title="Tổng thu nhập"
   value={formatCurrency(totalIncome)}
@@ -1064,12 +1128,17 @@ if (!session) {
   description={`Thu nhập trừ chi tiêu trong ${activePeriodLabel}`}
   type="balance"
 />
-        </section>
+        </section>}
 
         <section className="overview-grid">
-          <MonthlyBarChart data={monthlyData} />
+          <MonthlyBarChart data={monthlyData} isLoading={isTransactionsLoading} />
 
           <article id="budget" className="panel budget-panel">
+            {isBudgetLoading && <div className="budget-loading-overlay" aria-label="Đang tải ngân sách">
+              <div className="skeleton-block"></div>
+              <div className="skeleton-block"></div>
+              <div className="skeleton-block"></div>
+            </div>}
             <div className="panel-header">
               <div>
                 <h2>Ngân sách tháng</h2>
@@ -1099,7 +1168,7 @@ if (!session) {
 </div>
               <div className="progress-track">
                 <div
-                  className="progress-value"
+                  className={`progress-value ${budgetStatus.className}`}
                   style={{
                     width: `${Math.min(selectedMonthBudgetPercent, 100)}%`,
                   }}
@@ -1148,6 +1217,7 @@ if (!session) {
     onViewReceipt={handleViewReceipt}
     onExport={handleExportTransactions}
     isExporting={isExporting}
+    isLoading={isTransactionsLoading}
   />
 </section>
       </main>

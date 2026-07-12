@@ -299,6 +299,8 @@ function TransactionForm({
 
     if (!isValidDate(form.date)) {
       nextErrors.date = "Vui lòng chọn ngày giao dịch hợp lệ.";
+    } else if (form.date > getToday()) {
+      nextErrors.date = "Ngày giao dịch không được ở trong tương lai.";
     }
 
     if (!categories.includes(form.category)) {
@@ -444,6 +446,7 @@ function TransactionForm({
               <input
                 name="date"
                 type="date"
+                max={getToday()}
                 value={form.date}
                 onChange={handleChange}
                 required

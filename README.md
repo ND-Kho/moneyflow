@@ -6,7 +6,9 @@ MoneyFlow là ứng dụng quản lý tài chính cá nhân được xây dựng
 
 - Thêm, sửa và xóa khoản thu hoặc chi.
 - Tổng hợp thu nhập, chi tiêu, số dư và ngân sách theo tháng.
-- Cảnh báo khi sử dụng 50%, 80% hoặc vượt 100% ngân sách.
+- Cảnh báo ngân sách động: xanh dưới 80%, cam từ 80% và đỏ khi đạt 100%.
+- Toast phản hồi các thao tác cloud và skeleton loading khi chờ Supabase.
+- Không cho phép tạo giao dịch có ngày trong tương lai ở cả React và PostgreSQL.
 - Yêu cầu người dùng thiết lập ngân sách khi đăng nhập lần đầu, không dùng giá trị mặc định.
 - Trục biểu đồ thu chi tự mở rộng từ 1 triệu lên 10 triệu và các mức lớn hơn theo dữ liệu thực tế.
 - Tìm kiếm và lọc theo loại, danh mục hoặc khoảng ngày tùy chỉnh.
@@ -80,6 +82,12 @@ Chạy tiếp migration metadata OCR:
 
 ```text
 supabase/migrations/202607120002_receipt_ocr.sql
+```
+
+Chạy migration chặn ngày giao dịch tương lai:
+
+```text
+supabase/migrations/202607120003_future_transaction_guard.sql
 ```
 
 ## Triển khai Edge Function OCR

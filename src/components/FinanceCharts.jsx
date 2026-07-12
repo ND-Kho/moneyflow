@@ -53,7 +53,7 @@ function formatYAxisTick(value) {
   return new Intl.NumberFormat("vi-VN").format(value);
 }
 
-export function MonthlyBarChart({ data }) {
+export function MonthlyBarChart({ data, isLoading = false }) {
   const yAxisMaximum = getYAxisMaximum(data);
   const ticks = Array.from({ length: 5 }, (_, index) => (yAxisMaximum / 4) * index);
 
@@ -67,7 +67,9 @@ export function MonthlyBarChart({ data }) {
       </div>
 
       <div className="chart-box">
-        <ResponsiveContainer width="100%" height="100%">
+        {isLoading ? (
+          <div className="chart-skeleton skeleton-block" aria-label="Đang tải biểu đồ"></div>
+        ) : <ResponsiveContainer width="100%" height="100%">
           <BarChart
             data={data}
             margin={{ top: 10, right: 12, left: 8, bottom: 0 }}
@@ -97,7 +99,7 @@ export function MonthlyBarChart({ data }) {
               radius={[6, 6, 0, 0]}
             />
           </BarChart>
-        </ResponsiveContainer>
+        </ResponsiveContainer>}
       </div>
     </article>
   );
