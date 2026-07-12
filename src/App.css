@@ -1830,3 +1830,84 @@ table tbody tr:hover {
     grid-template-columns: 70px minmax(0, 1fr);
   }
 }
+
+/* First-login budget setup */
+
+.budget-setup-backdrop {
+  z-index: 120;
+}
+
+.budget-setup-modal {
+  display: grid;
+  width: min(460px, 100%);
+  gap: 16px;
+  padding: 32px;
+  border-radius: 22px;
+  background: #fff;
+  box-shadow: 0 28px 80px rgba(15, 23, 42, 0.3);
+}
+
+.budget-setup-icon {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  place-items: center;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #6366f1, #22c55e);
+  color: #fff;
+  font-size: 26px;
+}
+
+.budget-setup-modal h2 {
+  color: #1e293b;
+  font-size: 24px;
+  line-height: 1.25;
+}
+
+.budget-setup-modal > p:not(.page-label) {
+  color: #64748b;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.budget-setup-modal label {
+  display: grid;
+  gap: 8px;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.budget-setup-modal input {
+  width: 100%;
+  min-height: 48px;
+  border: 1px solid #dbe2ea;
+  border-radius: 12px;
+  padding: 12px 14px;
+  outline: none;
+  color: #1e293b;
+  font: inherit;
+  font-size: 16px;
+}
+
+.budget-setup-modal input:focus {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.14);
+}
+
+.budget-setup-modal .primary-button {
+  min-height: 48px;
+}
+
+@media (max-width: 560px) {
+  .budget-setup-backdrop {
+    align-items: end;
+    padding: 0;
+  }
+
+  .budget-setup-modal {
+    width: 100%;
+    padding: 24px 18px calc(24px + env(safe-area-inset-bottom));
+    border-radius: 22px 22px 0 0;
+  }
+}

@@ -27,11 +27,36 @@ function formatCurrency(value) {
   }).format(value);
 }
 
-function formatMillion(value) {
-  return `${value / 1000000}tr`;
+function getYAxisMaximum(data) {
+  const highestValue = Math.max(
+    0,
+    ...data.flatMap((item) => [Number(item.income) || 0, Number(item.expense) || 0])
+  );
+
+  if (highestValue <= 1000000) return 1000000;
+  if (highestValue <= 10000000) return 10000000;
+
+  const magnitude = 10 ** Math.floor(Math.log10(highestValue));
+  const normalized = highestValue / magnitude;
+  const niceMultiplier = normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
+  return niceMultiplier * magnitude;
+}
+
+function formatYAxisTick(value) {
+  if (value === 0) return "0";
+  if (Math.abs(value) >= 1000000) {
+    return `${new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 1 }).format(value / 1000000)} tr`;
+  }
+  if (Math.abs(value) >= 1000) {
+    return `${new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 }).format(value / 1000)} nghìn`;
+  }
+  return new Intl.NumberFormat("vi-VN").format(value);
 }
 
 export function MonthlyBarChart({ data }) {
+  const yAxisMaximum = getYAxisMaximum(data);
+  const ticks = Array.from({ length: 5 }, (_, index) => (yAxisMaximum / 4) * index);
+
   return (
     <article className="panel">
       <div className="panel-header">
@@ -45,11 +70,16 @@ export function MonthlyBarChart({ data }) {
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
             data={data}
-            margin={{ top: 10, right: 12, left: 0, bottom: 0 }}
+            margin={{ top: 10, right: 12, left: 8, bottom: 0 }}
           >
             <CartesianGrid strokeDasharray="3 3" vertical={false} />
             <XAxis dataKey="month" />
-            <YAxis tickFormatter={formatMillion} />
+            <YAxis
+              domain={[0, yAxisMaximum]}
+              ticks={ticks}
+              tickFormatter={formatYAxisTick}
+              width={72}
+            />
             <Tooltip formatter={(value) => formatCurrency(value)} />
             <Legend />
 

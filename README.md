@@ -7,6 +7,8 @@ MoneyFlow là ứng dụng quản lý tài chính cá nhân được xây dựng
 - Thêm, sửa và xóa khoản thu hoặc chi.
 - Tổng hợp thu nhập, chi tiêu, số dư và ngân sách theo tháng.
 - Cảnh báo khi sử dụng 50%, 80% hoặc vượt 100% ngân sách.
+- Yêu cầu người dùng thiết lập ngân sách khi đăng nhập lần đầu, không dùng giá trị mặc định.
+- Trục biểu đồ thu chi tự mở rộng từ 1 triệu lên 10 triệu và các mức lớn hơn theo dữ liệu thực tế.
 - Tìm kiếm và lọc theo loại, danh mục hoặc khoảng ngày tùy chỉnh.
 - Xuất các giao dịch đang hiển thị thành bảng Excel `.xlsx` có AutoFilter,
   cố định hàng tiêu đề và định dạng tiền VND.

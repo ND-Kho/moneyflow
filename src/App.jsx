@@ -31,6 +31,11 @@ function getMonthKey(dateValue) {
   return String(dateValue).slice(0, 7);
 }
 
+function getCurrentMonthKey() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+}
+
 function formatMonthLabel(monthKey) {
   if (!monthKey) {
     return "Chưa có dữ liệu";
@@ -290,9 +295,10 @@ const [startDateFilter, setStartDateFilter] = useState("");
 const [endDateFilter, setEndDateFilter] = useState("");
 const [isExporting, setIsExporting] = useState(false);
 
-const [selectedMonth, setSelectedMonth] = useState("");
-const [monthlyBudgetLimit, setMonthlyBudgetLimit] = useState(10000000);
-const [budgetInput, setBudgetInput] = useState("10000000");
+const [selectedMonth, setSelectedMonth] = useState(getCurrentMonthKey);
+const [monthlyBudgetLimit, setMonthlyBudgetLimit] = useState(0);
+const [budgetInput, setBudgetInput] = useState("");
+const [isBudgetSetupRequired, setIsBudgetSetupRequired] = useState(false);
 
 const [activeSection, setActiveSection] = useState("overview");
 
@@ -341,8 +347,8 @@ const fetchTransactions = async () => {
 
 const fetchMonthlyBudget = async (monthKey) => {
   if (!monthKey) {
-    setMonthlyBudgetLimit(10000000);
-    setBudgetInput("10000000");
+    setMonthlyBudgetLimit(0);
+    setBudgetInput("");
     return;
   }
 
@@ -367,8 +373,8 @@ const fetchMonthlyBudget = async (monthKey) => {
   }
 
   if (!data) {
-    setMonthlyBudgetLimit(10000000);
-    setBudgetInput("10000000");
+    setMonthlyBudgetLimit(0);
+    setBudgetInput("");
     return;
   }
 
@@ -383,6 +389,27 @@ useEffect(() => {
     fetchMonthlyBudget(selectedMonth);
   }
 }, [session, selectedMonth]);
+
+useEffect(() => {
+  async function checkInitialBudget() {
+    if (!session?.user?.id) return;
+
+    const { data, error } = await supabase
+      .from("monthly_budgets")
+      .select("id")
+      .eq("user_id", session.user.id)
+      .limit(1);
+
+    if (error) {
+      console.error("Lỗi kiểm tra ngân sách ban đầu:", error);
+      return;
+    }
+
+    setIsBudgetSetupRequired((data || []).length === 0);
+  }
+
+  checkInitialBudget();
+}, [session]);
 
 useEffect(() => {
   async function loadSession() {
@@ -407,26 +434,6 @@ useEffect(() => {
     subscription.unsubscribe();
   };
 }, []);
-
-useEffect(() => {
-  if (transactions.length === 0) {
-    // Keep the month selector consistent with the available transaction data.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setSelectedMonth("");
-    return;
-  }
-
-  const latestTransaction = [...transactions].sort(
-    (firstTransaction, secondTransaction) =>
-      new Date(secondTransaction.date) - new Date(firstTransaction.date)
-  )[0];
-
-  const latestMonthKey = getMonthKey(latestTransaction.date);
-
-  if (!selectedMonth) {
-    setSelectedMonth(latestMonthKey);
-  }
-}, [transactions, selectedMonth]);
 
 useEffect(() => {
   if (session) {
@@ -458,8 +465,7 @@ async function handleLogout() {
 
 const availableMonths = [
   ...new Set(
-    transactions
-      .map((transaction) => getMonthKey(transaction.date))
+    [selectedMonth, getCurrentMonthKey(), ...transactions.map((transaction) => getMonthKey(transaction.date))]
       .filter(Boolean)
   ),
 
@@ -972,6 +978,7 @@ async function handleSaveBudget() {
 
   setMonthlyBudgetLimit(Number(data.amount));
   setBudgetInput(String(Number(data.amount)));
+  setIsBudgetSetupRequired(false);
   alert("Đã lưu ngân sách tháng.");
 }
 
@@ -1072,7 +1079,11 @@ if (!session) {
 
             <div className="budget-content">
               <strong>{formatCurrency(selectedMonthExpense)}</strong>
-<span>trên ngân sách {formatCurrency(monthlyBudgetLimit)}</span>
+<span>
+  {monthlyBudgetLimit > 0
+    ? `trên ngân sách ${formatCurrency(monthlyBudgetLimit)}`
+    : "Chưa thiết lập ngân sách cho tháng này"}
+</span>
 <div className="budget-editor">
   <input
     type="number"
@@ -1095,15 +1106,15 @@ if (!session) {
                 ></div>
               </div>
 
-              <div className={`budget-status ${budgetStatus.className}`}>
+              {monthlyBudgetLimit > 0 && <div className={`budget-status ${budgetStatus.className}`}>
   <strong>{budgetStatus.label}</strong>
   <p>{budgetStatus.message}</p>
-</div>
+</div>}
 
-<p>
+{monthlyBudgetLimit > 0 && <p>
   Bạn đã sử dụng {selectedMonthBudgetPercent}% ngân sách trong{" "}
   {formatMonthLabel(selectedMonth)}.
-</p>
+</p>}
             </div>
           </article>
         </section>
@@ -1148,6 +1159,31 @@ if (!session) {
     onSubmit={handleSaveTransaction}
   />
 )}
+
+      {isBudgetSetupRequired && (
+        <div className="modal-backdrop budget-setup-backdrop">
+          <section className="budget-setup-modal" role="dialog" aria-modal="true" aria-labelledby="budget-setup-title">
+            <div className="budget-setup-icon">◎</div>
+            <p className="page-label">THIẾT LẬP BAN ĐẦU</p>
+            <h2 id="budget-setup-title">Ngân sách tháng của bạn là bao nhiêu?</h2>
+            <p>Nhập giới hạn chi tiêu mong muốn cho {formatMonthLabel(selectedMonth)}. Bạn có thể thay đổi lại sau.</p>
+            <label>
+              Ngân sách (VND)
+              <input
+                type="number"
+                min="1"
+                autoFocus
+                value={budgetInput}
+                onChange={(event) => setBudgetInput(event.target.value)}
+                placeholder="Ví dụ: 5000000"
+              />
+            </label>
+            <button className="primary-button" type="button" onClick={handleSaveBudget}>
+              Bắt đầu sử dụng MoneyFlow
+            </button>
+          </section>
+        </div>
+      )}
     </div>
   );
 }
