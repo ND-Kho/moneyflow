@@ -1,9 +1,4 @@
-function formatCurrency(amount) {
-  return new Intl.NumberFormat("vi-VN", {
-    style: "currency",
-    currency: "VND",
-  }).format(amount);
-}
+import { formatCurrency } from "../utils/finance";
 
 function formatDate(date) {
   return new Intl.DateTimeFormat("vi-VN").format(
@@ -21,7 +16,7 @@ function TransactionTable({
   isLoading = false,
 }) {
   return (
-    <section className="panel transaction-panel">
+    <section className="panel transaction-panel" aria-busy={isLoading}>
       <div className="panel-header">
   <div>
     <h2>Danh sách giao dịch</h2>
@@ -104,6 +99,7 @@ function TransactionTable({
                         className="receipt-button"
                         type="button"
                         onClick={() => onViewReceipt(transaction.receipt_path)}
+                        aria-label={`Xem hóa đơn của ${transaction.title}`}
                       >
                         Hóa đơn
                       </button>
@@ -113,6 +109,7 @@ function TransactionTable({
                       className="edit-button"
                       type="button"
                       onClick={() => onEdit(transaction)}
+                      aria-label={`Sửa giao dịch ${transaction.title}`}
                     >
                       Sửa
                     </button>
@@ -121,6 +118,7 @@ function TransactionTable({
                       className="delete-button"
                       type="button"
                       onClick={() => onDelete(transaction.id)}
+                      aria-label={`Xóa giao dịch ${transaction.title}`}
                     >
                       Xóa
                     </button>

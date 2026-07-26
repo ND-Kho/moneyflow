@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { supabase } from "../lib/supabase";
+import Brand from "./Brand";
+import Icon from "./Icon";
 
-function AuthPage() {
+function AuthPage({ recoveryMode = false, onRecoveryComplete }) {
   const [mode, setMode] = useState("login");
   const [form, setForm] = useState({
     email: "",
@@ -12,8 +14,10 @@ function AuthPage() {
   const [message, setMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const isRegisterMode = mode === "register";
+  const isRecoveryMode = recoveryMode;
 
   function handleChange(event) {
     const { name, value } = event.target;
@@ -45,7 +49,7 @@ function AuthPage() {
     const email = form.email.trim();
     const password = form.password;
 
-    if (!email || !password) {
+    if ((!isRecoveryMode && !email) || !password) {
       setErrorMessage("Vui lòng nhập đầy đủ email và mật khẩu.");
       return;
     }
@@ -55,7 +59,7 @@ function AuthPage() {
       return;
     }
 
-    if (isRegisterMode && password !== form.confirmPassword) {
+    if ((isRegisterMode || isRecoveryMode) && password !== form.confirmPassword) {
       setErrorMessage("Mật khẩu xác nhận không khớp.");
       return;
     }
@@ -63,7 +67,16 @@ function AuthPage() {
     setIsSubmitting(true);
 
     try {
-      if (isRegisterMode) {
+      if (isRecoveryMode) {
+        const { error } = await supabase.auth.updateUser({ password });
+
+        if (error) {
+          throw error;
+        }
+
+        window.history.replaceState({}, document.title, window.location.pathname);
+        onRecoveryComplete?.();
+      } else if (isRegisterMode) {
         const { error } = await supabase.auth.signUp({
           email,
           password,
@@ -93,17 +106,45 @@ function AuthPage() {
     }
   }
 
+  async function handleForgotPassword() {
+    const email = form.email.trim();
+
+    setMessage("");
+    setErrorMessage("");
+
+    if (!email) {
+      setErrorMessage("Nhập email trước khi yêu cầu đặt lại mật khẩu.");
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.origin,
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      setMessage("Đã gửi liên kết đặt lại mật khẩu. Hãy kiểm tra hộp thư của bạn.");
+    } catch (error) {
+      setErrorMessage(
+        error.message || "Không thể gửi email đặt lại mật khẩu."
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
   return (
     <main className="auth-page">
       <section className="auth-introduction">
-        <div className="auth-brand">
-          <div className="brand-logo">₫</div>
-
-          <div>
-            <h2>MoneyFlow</h2>
-            <p>Quản lý tài chính cá nhân</p>
-          </div>
-        </div>
+        <Brand
+          className="auth-brand"
+          subtitle="Quản lý tài chính cá nhân"
+        />
 
         <div className="auth-introduction-content">
           <p className="auth-eyebrow">PERSONAL FINANCE</p>
@@ -139,54 +180,86 @@ function AuthPage() {
 
       <section className="auth-form-section">
         <form className="auth-card" onSubmit={handleSubmit}>
+          <Brand
+            className="auth-mobile-brand"
+            subtitle="Quản lý tài chính cá nhân"
+          />
+
           <div>
             <p className="page-label">
-              {isRegisterMode ? "TẠO TÀI KHOẢN" : "CHÀO MỪNG TRỞ LẠI"}
+              {isRecoveryMode
+                ? "BẢO MẬT TÀI KHOẢN"
+                : isRegisterMode
+                ? "TẠO TÀI KHOẢN"
+                : "CHÀO MỪNG TRỞ LẠI"}
             </p>
 
             <h2>
-              {isRegisterMode ? "Đăng ký MoneyFlow" : "Đăng nhập"}
+              {isRecoveryMode
+                ? "Đặt mật khẩu mới"
+                : isRegisterMode
+                ? "Đăng ký MoneyFlow"
+                : "Đăng nhập"}
             </h2>
 
             <p className="auth-card-description">
-              {isRegisterMode
+              {isRecoveryMode
+                ? "Tạo mật khẩu mới có ít nhất 6 ký tự cho tài khoản của bạn."
+                : isRegisterMode
                 ? "Tạo tài khoản để bắt đầu theo dõi tài chính cá nhân."
                 : "Nhập thông tin tài khoản để tiếp tục quản lý chi tiêu."}
             </p>
           </div>
 
-          <label>
-            Email
-            <input
-              name="email"
-              type="email"
-              value={form.email}
-              onChange={handleChange}
-              placeholder="name@example.com"
-              autoComplete="email"
-            />
-          </label>
+          {!isRecoveryMode && (
+            <label htmlFor="auth-email">
+              Email
+              <input
+                id="auth-email"
+                name="email"
+                type="email"
+                value={form.email}
+                onChange={handleChange}
+                placeholder="name@example.com"
+                autoComplete="email"
+              />
+            </label>
+          )}
 
-          <label>
+          <label htmlFor="auth-password">
             Mật khẩu
-            <input
-              name="password"
-              type="password"
-              value={form.password}
-              onChange={handleChange}
-              placeholder="Tối thiểu 6 ký tự"
-              autoComplete={
-                isRegisterMode ? "new-password" : "current-password"
-              }
-            />
+            <span className="password-input">
+              <input
+                id="auth-password"
+                name="password"
+                type={showPassword ? "text" : "password"}
+                value={form.password}
+                onChange={handleChange}
+                placeholder="Tối thiểu 6 ký tự"
+                autoComplete={
+                  isRegisterMode || isRecoveryMode
+                    ? "new-password"
+                    : "current-password"
+                }
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((currentValue) => !currentValue)}
+                aria-label={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+                aria-pressed={showPassword}
+              >
+                <Icon name={showPassword ? "eyeOff" : "eye"} size={18} />
+              </button>
+            </span>
           </label>
 
-          {isRegisterMode && (
-            <label>
+          {(isRegisterMode || isRecoveryMode) && (
+            <label htmlFor="auth-confirm-password">
               Xác nhận mật khẩu
               <input
+                id="auth-confirm-password"
                 name="confirmPassword"
-                type="password"
+                type={showPassword ? "text" : "password"}
                 value={form.confirmPassword}
                 onChange={handleChange}
                 placeholder="Nhập lại mật khẩu"
@@ -195,12 +268,23 @@ function AuthPage() {
             </label>
           )}
 
+          {!isRegisterMode && !isRecoveryMode && (
+            <button
+              className="forgot-password-button"
+              type="button"
+              onClick={handleForgotPassword}
+              disabled={isSubmitting}
+            >
+              Quên mật khẩu?
+            </button>
+          )}
+
           {errorMessage && (
-            <p className="auth-message error">{errorMessage}</p>
+            <p className="auth-message error" role="alert">{errorMessage}</p>
           )}
 
           {message && (
-            <p className="auth-message success">{message}</p>
+            <p className="auth-message success" role="status">{message}</p>
           )}
 
           <button
@@ -210,12 +294,14 @@ function AuthPage() {
           >
             {isSubmitting
               ? "Đang xử lý..."
+              : isRecoveryMode
+              ? "Lưu mật khẩu mới"
               : isRegisterMode
               ? "Tạo tài khoản"
               : "Đăng nhập"}
           </button>
 
-          <p className="auth-switch">
+          {!isRecoveryMode && <p className="auth-switch">
             {isRegisterMode
               ? "Bạn đã có tài khoản?"
               : "Bạn chưa có tài khoản?"}
@@ -228,7 +314,7 @@ function AuthPage() {
             >
               {isRegisterMode ? "Đăng nhập" : "Đăng ký ngay"}
             </button>
-          </p>
+          </p>}
         </form>
       </section>
     </main>

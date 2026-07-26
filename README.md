@@ -18,9 +18,15 @@ MoneyFlow là ứng dụng quản lý tài chính cá nhân được xây dựng
   hiệu lực tạm thời và dữ liệu được cô lập theo tài khoản.
 - Dùng Supabase Edge Function và Azure AI Document Intelligence để đọc cửa hàng, ngày, tổng tiền,
   loại và danh mục từ ảnh; người dùng xác nhận trước khi lưu.
+- Hiển thị mức tin cậy OCR theo ba mức: xanh từ 85%, cam từ 70% đến dưới 85%
+  và đỏ dưới 70% để nhắc người dùng kiểm tra dữ liệu.
 - Hóa đơn nhiều món vẫn được lưu thành một giao dịch theo tổng thanh toán; tên,
   số lượng và giá từng món được đưa vào ghi chú để tránh làm sai số dư.
-- Biểu đồ cơ cấu chi tiêu và so sánh dòng tiền sáu tháng gần nhất.
+- Biểu đồ cơ cấu chi tiêu và so sánh dòng tiền đủ sáu tháng lịch gần nhất,
+  kể cả tháng không phát sinh giao dịch.
+- Định dạng trực tiếp số tiền theo VND khi nhập ngân sách và giao dịch.
+- Hỗ trợ bàn phím cho hộp thoại, đóng bằng phím Escape và thông báo lỗi có nhãn
+  dành cho công nghệ hỗ trợ.
 
 ## Kiến trúc cloud
 
@@ -28,7 +34,7 @@ MoneyFlow là ứng dụng quản lý tài chính cá nhân được xây dựng
 - Supabase Auth: đăng ký, đăng nhập và quản lý phiên.
 - Supabase PostgreSQL: lưu giao dịch và ngân sách.
 - Row Level Security: cô lập dữ liệu theo từng tài khoản.
-- GitHub Actions: tự động chạy ESLint và production build.
+- GitHub Actions: tự động chạy ESLint, test có ngưỡng coverage và production build.
 - Vercel: tự động triển khai sau khi thay đổi được nhập vào nhánh `main`.
 
 ## Chạy dự án
@@ -52,12 +58,17 @@ Khởi động môi trường phát triển:
 npm run dev
 ```
 
-Kiểm tra chất lượng và production build:
+Kiểm tra chất lượng, test và production build:
 
 ```bash
 npm run lint
+npm run test:coverage
 npm run build
 ```
+
+CI dùng Node.js 22 và chạy lại ba lệnh trên cho mọi push hoặc pull request vào
+nhánh `main`. Nếu lint, kiểm thử, ngưỡng coverage hoặc build thất bại thì bước
+kiểm tra sẽ không đạt.
 
 ## Thiết lập bảo mật Supabase
 
@@ -107,6 +118,8 @@ Function tắt bước kiểm JWT cũ ở gateway nhưng tự xác thực access
 HTTP 401. Ảnh được gửi đến model `prebuilt-receipt` của Azure chỉ khi người dùng
 chủ động bấm nút OCR. Với tầng Free F0, khi hết hạn mức tháng, function trả thông
 báo để người dùng nhập thủ công và không tự nâng cấp sang tầng trả phí.
+Function cũng kiểm tra chữ ký nhị phân thật của JPG, PNG hoặc WebP và chỉ theo dõi
+URL kết quả thuộc đúng Azure endpoint đã cấu hình.
 
 Tài liệu tham khảo:
 

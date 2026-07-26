@@ -53,6 +53,40 @@ function decodeBase64(value: string) {
   return bytes;
 }
 
+function hasValidImageSignature(bytes: Uint8Array, mimeType: string) {
+  if (mimeType === "image/jpeg") {
+    return bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+  }
+
+  if (mimeType === "image/png") {
+    const pngSignature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+    return pngSignature.every((value, index) => bytes[index] === value);
+  }
+
+  if (mimeType === "image/webp") {
+    return (
+      String.fromCharCode(...bytes.slice(0, 4)) === "RIFF" &&
+      String.fromCharCode(...bytes.slice(8, 12)) === "WEBP"
+    );
+  }
+
+  return false;
+}
+
+function isTrustedOperationLocation(operationLocation: string, endpoint: string) {
+  try {
+    const operationUrl = new URL(operationLocation);
+    const endpointUrl = new URL(endpoint);
+
+    return (
+      operationUrl.protocol === "https:" &&
+      operationUrl.origin === endpointUrl.origin
+    );
+  } catch {
+    return false;
+  }
+}
+
 function wait(milliseconds: number) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
@@ -225,14 +259,27 @@ Deno.serve(async (request) => {
     return jsonResponse({ error: "Ảnh dùng OCR không được vượt quá 4 MB trên gói Azure F0." }, 400);
   }
 
-  const analyzeUrl = `${normalizeEndpoint(azureEndpoint)}/documentintelligence/documentModels/prebuilt-receipt:analyze?api-version=${AZURE_API_VERSION}`;
+  let imageBytes: Uint8Array;
+
+  try {
+    imageBytes = decodeBase64(imageMatch[2]);
+  } catch {
+    return jsonResponse({ error: "Dữ liệu ảnh không phải Base64 hợp lệ." }, 400);
+  }
+
+  if (!hasValidImageSignature(imageBytes, imageMatch[1])) {
+    return jsonResponse({ error: "Nội dung ảnh không khớp với định dạng đã khai báo." }, 400);
+  }
+
+  const normalizedAzureEndpoint = normalizeEndpoint(azureEndpoint);
+  const analyzeUrl = `${normalizedAzureEndpoint}/documentintelligence/documentModels/prebuilt-receipt:analyze?api-version=${AZURE_API_VERSION}`;
   const analyzeResponse = await fetch(analyzeUrl, {
     method: "POST",
     headers: {
       "Ocp-Apim-Subscription-Key": azureApiKey,
       "Content-Type": imageMatch[1],
     },
-    body: decodeBase64(imageMatch[2]),
+    body: imageBytes,
   });
 
   if (!analyzeResponse.ok) {
@@ -242,7 +289,10 @@ Deno.serve(async (request) => {
 
   const operationLocation = analyzeResponse.headers.get("operation-location");
 
-  if (!operationLocation) {
+  if (
+    !operationLocation ||
+    !isTrustedOperationLocation(operationLocation, normalizedAzureEndpoint)
+  ) {
     return jsonResponse({ error: "Azure OCR không trả về mã theo dõi kết quả." }, 502);
   }
 

@@ -43,10 +43,11 @@ function TransactionFilters({
       </div>
 
       <div className="filter-grid">
-        <label className="search-box">
+        <label className="search-box" htmlFor="transaction-search">
           <span>⌕</span>
 
           <input
+            id="transaction-search"
             type="search"
             value={searchTerm}
             onChange={(event) => onSearchChange(event.target.value)}
@@ -55,6 +56,7 @@ function TransactionFilters({
         </label>
 
         <select
+          aria-label="Lọc theo loại giao dịch"
           value={typeFilter}
           onChange={(event) => onTypeChange(event.target.value)}
         >
@@ -64,6 +66,7 @@ function TransactionFilters({
         </select>
 
         <select
+          aria-label="Lọc theo danh mục"
           value={categoryFilter}
           onChange={(event) => onCategoryChange(event.target.value)}
         >

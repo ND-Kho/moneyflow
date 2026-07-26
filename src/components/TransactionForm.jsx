@@ -1,5 +1,12 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "../lib/supabase";
+import {
+  formatCurrencyInput,
+  getOcrConfidenceStatus,
+  parseCurrencyInput,
+  sanitizeCurrencyInput,
+} from "../utils/finance";
+import { getTodayKey, isValidDate } from "../utils/dates";
 
 const MAX_TITLE_LENGTH = 100;
 const MAX_NOTE_LENGTH = 500;
@@ -38,30 +45,6 @@ const categoryIcons = {
   Khác: "💳",
 };
 
-function getToday() {
-  const today = new Date();
-  const year = today.getFullYear();
-  const month = String(today.getMonth() + 1).padStart(2, "0");
-  const day = String(today.getDate()).padStart(2, "0");
-
-  return `${year}-${month}-${day}`;
-}
-
-function isValidDate(value) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    return false;
-  }
-
-  const [year, month, day] = value.split("-").map(Number);
-  const date = new Date(Date.UTC(year, month - 1, day));
-
-  return (
-    date.getUTCFullYear() === year &&
-    date.getUTCMonth() === month - 1 &&
-    date.getUTCDate() === day
-  );
-}
-
 function readFileAsDataUrl(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -83,8 +66,8 @@ function TransactionForm({
       ? {
           ...initialTransaction,
           title: initialTransaction.title || "",
-          amount: initialTransaction.amount ?? "",
-          date: initialTransaction.date || getToday(),
+          amount: String(initialTransaction.amount ?? ""),
+          date: initialTransaction.date || getTodayKey(),
           note: initialTransaction.note || "",
         }
       : {
@@ -92,7 +75,7 @@ function TransactionForm({
       title: "",
       amount: "",
       category: "Ăn uống",
-      date: getToday(),
+      date: getTodayKey(),
       note: "",
         }
   );
@@ -108,10 +91,76 @@ function TransactionForm({
   const [ocrProcessedAt, setOcrProcessedAt] = useState(
     initialTransaction?.receipt_ocr_processed_at ?? null
   );
+  const [receiptPreviewUrl, setReceiptPreviewUrl] = useState("");
   const receiptInputRef = useRef(null);
+  const modalRef = useRef(null);
+  const titleInputRef = useRef(null);
+  const onCloseRef = useRef(onClose);
+  const isBusyRef = useRef(false);
 
   const categories =
     form.type === "income" ? incomeCategories : expenseCategories;
+  const ocrStatus = getOcrConfidenceStatus(ocrConfidence);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  useEffect(() => {
+    isBusyRef.current = isSubmitting || isOcrLoading;
+  }, [isSubmitting, isOcrLoading]);
+
+  useEffect(() => {
+    const previouslyFocusedElement = document.activeElement;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    titleInputRef.current?.focus();
+
+    function handleKeyDown(event) {
+      if (event.key === "Escape" && !isBusyRef.current) {
+        onCloseRef.current();
+        return;
+      }
+
+      if (event.key !== "Tab" || !modalRef.current) {
+        return;
+      }
+
+      const focusableElements = modalRef.current.querySelectorAll(
+        'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      );
+      const firstElement = focusableElements[0];
+      const lastElement = focusableElements[focusableElements.length - 1];
+
+      if (event.shiftKey && document.activeElement === firstElement) {
+        event.preventDefault();
+        lastElement?.focus();
+      } else if (!event.shiftKey && document.activeElement === lastElement) {
+        event.preventDefault();
+        firstElement?.focus();
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+      previouslyFocusedElement?.focus?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!receiptFile) {
+      setReceiptPreviewUrl("");
+      return undefined;
+    }
+
+    const previewUrl = URL.createObjectURL(receiptFile);
+    setReceiptPreviewUrl(previewUrl);
+
+    return () => URL.revokeObjectURL(previewUrl);
+  }, [receiptFile]);
 
   function handleTypeChange(type) {
     const defaultCategory =
@@ -131,10 +180,11 @@ function TransactionForm({
 
   function handleChange(event) {
     const { name, value } = event.target;
+    const nextValue = name === "amount" ? sanitizeCurrencyInput(value) : value;
 
     setForm({
       ...form,
-      [name]: value,
+      [name]: nextValue,
     });
 
     if (errors[name]) {
@@ -252,7 +302,7 @@ function TransactionForm({
             : currentForm.title,
         amount:
           Number.isFinite(nextAmount) && nextAmount > 0
-            ? nextAmount
+            ? String(Math.round(nextAmount))
             : currentForm.amount,
         date: isValidDate(receipt.transaction_date)
           ? receipt.transaction_date
@@ -284,7 +334,7 @@ function TransactionForm({
   async function handleSubmit(event) {
     event.preventDefault();
 
-    const amount = Number(form.amount);
+    const amount = parseCurrencyInput(form.amount);
     const nextErrors = {};
 
     if (!form.title.trim()) {
@@ -299,7 +349,7 @@ function TransactionForm({
 
     if (!isValidDate(form.date)) {
       nextErrors.date = "Vui lòng chọn ngày giao dịch hợp lệ.";
-    } else if (form.date > getToday()) {
+    } else if (form.date > getTodayKey()) {
       nextErrors.date = "Ngày giao dịch không được ở trong tương lai.";
     }
 
@@ -313,6 +363,11 @@ function TransactionForm({
 
     if (Object.keys(nextErrors).length > 0) {
       setErrors(nextErrors);
+      window.requestAnimationFrame(() => {
+        modalRef.current
+          ?.querySelector('[aria-invalid="true"]')
+          ?.focus();
+      });
       return;
     }
 
@@ -347,15 +402,28 @@ function TransactionForm({
   }
 
   return (
-    <div className="modal-backdrop">
-      <section className="transaction-modal">
+    <div
+      className="modal-backdrop"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !isBusyRef.current) {
+          onClose();
+        }
+      }}
+    >
+      <section
+        className="transaction-modal"
+        ref={modalRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="transaction-modal-title"
+      >
         <div className="modal-header">
           <div>
             <p className="page-label">
               {isEditing ? "CHỈNH SỬA GIAO DỊCH" : "GIAO DỊCH MỚI"}
             </p>
 
-            <h2>
+            <h2 id="transaction-modal-title">
               {isEditing
                 ? "Cập nhật thông tin giao dịch"
                 : "Thêm khoản thu hoặc chi"}
@@ -396,29 +464,35 @@ function TransactionForm({
             <input
               name="title"
               type="text"
+              ref={titleInputRef}
               value={form.title}
               onChange={handleChange}
               maxLength={MAX_TITLE_LENGTH}
               required
               aria-invalid={Boolean(errors.title)}
+              aria-describedby={errors.title ? "title-error" : undefined}
               placeholder="Ví dụ: Ăn trưa, đổ xăng, lương làm thêm..."
             />
-            {errors.title && <span className="field-error">{errors.title}</span>}
+            {errors.title && <span className="field-error" id="title-error">{errors.title}</span>}
           </label>
 
           <label>
             Số tiền
             <input
               name="amount"
-              type="number"
-              min="1"
-              value={form.amount}
+              type="text"
+              inputMode="numeric"
+              value={formatCurrencyInput(form.amount)}
               onChange={handleChange}
               required
               aria-invalid={Boolean(errors.amount)}
-              placeholder="Ví dụ: 45000"
+              aria-describedby={errors.amount ? "amount-error" : "amount-hint"}
+              placeholder="Ví dụ: 45.000"
             />
-            {errors.amount && <span className="field-error">{errors.amount}</span>}
+            <span className="field-hint input-hint" id="amount-hint">
+              Số tiền Việt Nam đồng (₫)
+            </span>
+            {errors.amount && <span className="field-error" id="amount-error">{errors.amount}</span>}
           </label>
 
           <div className="form-grid">
@@ -429,6 +503,7 @@ function TransactionForm({
                 value={form.category}
                 onChange={handleChange}
                 aria-invalid={Boolean(errors.category)}
+                aria-describedby={errors.category ? "category-error" : undefined}
               >
                 {categories.map((category) => (
                   <option value={category} key={category}>
@@ -437,7 +512,7 @@ function TransactionForm({
                 ))}
               </select>
               {errors.category && (
-                <span className="field-error">{errors.category}</span>
+                <span className="field-error" id="category-error">{errors.category}</span>
               )}
             </label>
 
@@ -446,13 +521,14 @@ function TransactionForm({
               <input
                 name="date"
                 type="date"
-                max={getToday()}
+                max={getTodayKey()}
                 value={form.date}
                 onChange={handleChange}
                 required
                 aria-invalid={Boolean(errors.date)}
+                aria-describedby={errors.date ? "date-error" : undefined}
               />
-              {errors.date && <span className="field-error">{errors.date}</span>}
+              {errors.date && <span className="field-error" id="date-error">{errors.date}</span>}
             </label>
           </div>
 
@@ -465,35 +541,46 @@ function TransactionForm({
               onChange={handleChange}
               maxLength={MAX_NOTE_LENGTH}
               aria-invalid={Boolean(errors.note)}
+              aria-describedby={errors.note ? "note-error" : "note-hint"}
               placeholder="Có thể bỏ trống"
             />
-            <span className="field-hint">
+            <span className="field-hint" id="note-hint">
               {form.note.length}/{MAX_NOTE_LENGTH} ký tự
             </span>
-            {errors.note && <span className="field-error">{errors.note}</span>}
+            {errors.note && <span className="field-error" id="note-error">{errors.note}</span>}
           </label>
 
-          <label className="receipt-upload">
-            Ảnh hóa đơn
+          <div className="receipt-upload">
+            <label htmlFor="receipt-file">Ảnh hóa đơn</label>
             <input
+              id="receipt-file"
               type="file"
               ref={receiptInputRef}
               accept="image/jpeg,image/png,image/webp"
               onChange={handleReceiptChange}
+              aria-describedby="receipt-hint"
             />
-            <span className="field-hint receipt-hint">
+            <span className="field-hint receipt-hint" id="receipt-hint">
               Không bắt buộc • JPG, PNG hoặc WebP • Tối đa 5 MB
             </span>
             {receiptFile && (
-              <div className="receipt-selection">
-                <span>{receiptFile.name}</span>
-                <button
-                  type="button"
-                  onClick={clearSelectedReceipt}
-                  disabled={isSubmitting}
-                >
-                  Bỏ chọn
-                </button>
+              <div className="receipt-preview-card">
+                {receiptPreviewUrl && (
+                  <img
+                    src={receiptPreviewUrl}
+                    alt="Xem trước ảnh hóa đơn đã chọn"
+                  />
+                )}
+                <div className="receipt-selection">
+                  <span title={receiptFile.name}>{receiptFile.name}</span>
+                  <button
+                    type="button"
+                    onClick={clearSelectedReceipt}
+                    disabled={isSubmitting}
+                  >
+                    Bỏ chọn
+                  </button>
+                </div>
               </div>
             )}
             {receiptFile && (
@@ -509,17 +596,18 @@ function TransactionForm({
               </button>
             )}
             {ocrResult && (
-              <div className="ocr-result" role="status">
+              <div className={`ocr-result ${ocrStatus.className}`} role="status">
                 <strong>
-                  OCR đã điền dữ liệu
+                  OCR đã điền dữ liệu • {ocrStatus.label}
                   {ocrConfidence !== null
                     ? ` • Tin cậy ${Math.round(ocrConfidence * 100)}%`
                     : ""}
                 </strong>
                 <p>
+                  {ocrStatus.message}
                   {Array.isArray(ocrResult.items) && ocrResult.items.length > 0
-                    ? `Đã nhận diện ${ocrResult.items.length} món. Hãy kiểm tra cửa hàng, danh sách món và tổng tiền trước khi lưu.`
-                    : "Hãy kiểm tra lại cửa hàng, ngày và tổng tiền trước khi lưu."}
+                    ? ` Đã nhận diện ${ocrResult.items.length} món.`
+                    : ""}
                 </p>
               </div>
             )}
@@ -543,7 +631,7 @@ function TransactionForm({
               <span className="field-error">{errors.receipt}</span>
             )}
             {errors.ocr && <span className="field-error">{errors.ocr}</span>}
-          </label>
+          </div>
 
           {errors.submit && (
             <p className="form-submit-error" role="alert">

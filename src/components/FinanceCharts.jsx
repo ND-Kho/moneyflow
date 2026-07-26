@@ -11,6 +11,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { formatCurrency } from "../utils/finance";
 
 const PIE_COLORS = [
   "#6873ee",
@@ -19,13 +20,6 @@ const PIE_COLORS = [
   "#e87979",
   "#a986e8",
 ];
-
-function formatCurrency(value) {
-  return new Intl.NumberFormat("vi-VN", {
-    style: "currency",
-    currency: "VND",
-  }).format(value);
-}
 
 function getYAxisMaximum(data) {
   const highestValue = Math.max(
@@ -66,7 +60,11 @@ export function MonthlyBarChart({ data, isLoading = false }) {
         </div>
       </div>
 
-      <div className="chart-box">
+      <div
+        className="chart-box"
+        role="img"
+        aria-label="Biểu đồ cột thu nhập và chi tiêu trong sáu tháng gần nhất"
+      >
         {isLoading ? (
           <div className="chart-skeleton skeleton-block" aria-label="Đang tải biểu đồ"></div>
         ) : <ResponsiveContainer width="100%" height="100%">
@@ -106,6 +104,8 @@ export function MonthlyBarChart({ data, isLoading = false }) {
 }
 
 export function ExpensePieChart({ data }) {
+  const hasData = data.length > 0;
+
   return (
     <article className="panel expense-chart-panel">
       <div className="panel-header">
@@ -115,11 +115,21 @@ export function ExpensePieChart({ data }) {
         </div>
       </div>
 
-      <div className="pie-chart-layout">
+      <div
+        className={`pie-chart-layout ${hasData ? "" : "empty"}`}
+        role="img"
+        aria-label="Biểu đồ cơ cấu chi tiêu theo danh mục"
+      >
+        {!hasData && (
+          <div className="chart-empty-state">
+            <strong>Chưa có khoản chi trong kỳ này</strong>
+            <p>Thêm giao dịch để xem cơ cấu chi tiêu theo danh mục.</p>
+          </div>
+        )}
         <div className="pie-chart-box">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
-              <Pie
+              {hasData && <Pie
                 data={data}
                 dataKey="value"
                 nameKey="name"
@@ -133,7 +143,7 @@ export function ExpensePieChart({ data }) {
                     fill={PIE_COLORS[index % PIE_COLORS.length]}
                   />
                 ))}
-              </Pie>
+              </Pie>}
 
               <Tooltip formatter={(value) => formatCurrency(value)} />
             </PieChart>

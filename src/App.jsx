@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import toast, { Toaster } from "react-hot-toast";
 import "./App.css";
 
@@ -10,80 +10,30 @@ import SummaryCard from "./components/SummaryCard";
 import TransactionForm from "./components/TransactionForm";
 import TransactionFilters from "./components/TransactionFilters";
 import TransactionTable from "./components/TransactionTable";
+import Brand from "./components/Brand";
 
 import {
   ExpensePieChart,
   MonthlyBarChart,
 } from "./components/FinanceCharts";
-
-
-function formatCurrency(amount) {
-  return new Intl.NumberFormat("vi-VN", {
-    style: "currency",
-    currency: "VND",
-  }).format(amount);
-}
-
-function getMonthKey(dateValue) {
-  if (!dateValue) {
-    return "";
-  }
-
-  return String(dateValue).slice(0, 7);
-}
-
-function getCurrentMonthKey() {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-}
-
-function formatMonthLabel(monthKey) {
-  if (!monthKey) {
-    return "Chưa có dữ liệu";
-  }
-
-  const [year, month] = monthKey.split("-");
-  return `Tháng ${month} / ${year}`;
-}
-
-function isValidDate(value) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    return false;
-  }
-
-  const [year, month, day] = value.split("-").map(Number);
-  const date = new Date(Date.UTC(year, month - 1, day));
-
-  return (
-    date.getUTCFullYear() === year &&
-    date.getUTCMonth() === month - 1 &&
-    date.getUTCDate() === day
-  );
-}
-
-function getTodayKey() {
-  const today = new Date();
-  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-}
-
-function isValidTransaction(transaction) {
-  const amount = Number(transaction.amount);
-  const title = String(transaction.title || "").trim();
-  const note = String(transaction.note || "").trim();
-  const date = String(transaction.date || "");
-
-  return (
-    title.length > 0 &&
-    title.length <= 100 &&
-    note.length <= 500 &&
-    Number.isFinite(amount) &&
-    amount > 0 &&
-    /^(income|expense)$/.test(transaction.type) &&
-    Boolean(transaction.category) &&
-    isValidDate(date) &&
-    date <= getTodayKey()
-  );
-}
+import {
+  formatCurrency,
+  formatCurrencyInput,
+  getBudgetStatus,
+  getTransactionTotals,
+  parseCurrencyInput,
+  sanitizeCurrencyInput,
+} from "./utils/finance";
+import {
+  buildMonthlyData,
+  formatMonthLabel,
+  getCurrentMonthKey,
+  getMonthKey,
+} from "./utils/dates";
+import {
+  filterTransactions,
+  isValidTransaction,
+} from "./utils/transactions";
 
 const RECEIPTS_BUCKET = "receipts";
 const MAX_RECEIPT_SIZE = 5 * 1024 * 1024;
@@ -290,6 +240,7 @@ async function exportTransactionsToExcel(transactionsToExport) {
 function App() {
   const [session, setSession] = useState(null);
 const [isAuthLoading, setIsAuthLoading] = useState(true);
+const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
 
  const [transactions, setTransactions] = useState([]);
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -440,6 +391,14 @@ useEffect(() => {
     setIsTransactionsLoading(Boolean(currentSession));
     setIsBudgetLoading(Boolean(currentSession));
     setSession(currentSession);
+    setIsPasswordRecovery(
+      Boolean(
+        currentSession &&
+          (window.location.hash.includes("type=recovery") ||
+            new URLSearchParams(window.location.search).get("type") ===
+              "recovery")
+      )
+    );
     setIsAuthLoading(false);
   }
 
@@ -447,10 +406,13 @@ useEffect(() => {
 
   const {
     data: { subscription },
-  } = supabase.auth.onAuthStateChange((_event, currentSession) => {
+  } = supabase.auth.onAuthStateChange((event, currentSession) => {
     setIsTransactionsLoading(Boolean(currentSession));
     setIsBudgetLoading(Boolean(currentSession));
     setSession(currentSession);
+    if (event === "PASSWORD_RECOVERY") {
+      setIsPasswordRecovery(true);
+    }
     setIsAuthLoading(false);
   });
 
@@ -487,203 +449,129 @@ async function handleLogout() {
   }
 }
 
-const availableMonths = [
-  ...new Set(
-    [selectedMonth, getCurrentMonthKey(), ...transactions.map((transaction) => getMonthKey(transaction.date))]
-      .filter(Boolean)
-  ),
-
-  ].sort((firstMonth, secondMonth) =>
-  secondMonth.localeCompare(firstMonth)
+const availableMonths = useMemo(
+  () =>
+    [
+      ...new Set(
+        [
+          selectedMonth,
+          getCurrentMonthKey(),
+          ...transactions.map((transaction) => getMonthKey(transaction.date)),
+        ].filter(Boolean)
+      ),
+    ].sort((firstMonth, secondMonth) =>
+      secondMonth.localeCompare(firstMonth)
+    ),
+  [selectedMonth, transactions]
 );
 
-const selectedMonthTransactions = transactions.filter(
-  (transaction) => getMonthKey(transaction.date) === selectedMonth
+const selectedMonthTransactions = useMemo(
+  () =>
+    transactions.filter(
+      (transaction) => getMonthKey(transaction.date) === selectedMonth
+    ),
+  [selectedMonth, transactions]
 );
 
 const hasDateRange = Boolean(startDateFilter || endDateFilter);
 const hasInvalidDateRange = Boolean(
   startDateFilter && endDateFilter && startDateFilter > endDateFilter
 );
-const dateRangeTransactions = hasInvalidDateRange
-  ? []
-  : transactions.filter((transaction) => {
-      const matchesStartDate =
-        !startDateFilter || transaction.date >= startDateFilter;
-      const matchesEndDate =
-        !endDateFilter || transaction.date <= endDateFilter;
 
-      return matchesStartDate && matchesEndDate;
-    });
+const dashboardTransactions = useMemo(() => {
+  if (!hasDateRange) {
+    return selectedMonth
+      ? selectedMonthTransactions
+      : transactions;
+  }
 
-const dashboardTransactions = hasDateRange
-  ? dateRangeTransactions
-  : selectedMonth
-  ? selectedMonthTransactions
-  : transactions;
+  if (hasInvalidDateRange) {
+    return [];
+  }
+
+  return transactions.filter(
+    (transaction) =>
+      (!startDateFilter || transaction.date >= startDateFilter) &&
+      (!endDateFilter || transaction.date <= endDateFilter)
+  );
+}, [
+  endDateFilter,
+  hasDateRange,
+  hasInvalidDateRange,
+  selectedMonth,
+  selectedMonthTransactions,
+  startDateFilter,
+  transactions,
+]);
 
 const activePeriodLabel = hasDateRange
   ? `${startDateFilter || "đầu kỳ"} đến ${endDateFilter || "hiện tại"}`
   : formatMonthLabel(selectedMonth);
 
-const totalIncome = dashboardTransactions
-  .filter((transaction) => transaction.type === "income")
-  .reduce(
-    (sum, transaction) => sum + Number(transaction.amount),
-    0
-  );
+const { income: totalIncome, expense: totalExpense, balance } = useMemo(
+  () => getTransactionTotals(dashboardTransactions),
+  [dashboardTransactions]
+);
 
-const totalExpense = dashboardTransactions
-  .filter((transaction) => transaction.type === "expense")
-  .reduce(
-    (sum, transaction) => sum + Number(transaction.amount),
-    0
-  );
-
-const balance = totalIncome - totalExpense;
-
-
-const selectedMonthExpense = selectedMonthTransactions
-  .filter((transaction) => transaction.type === "expense")
-  .reduce(
-    (sum, transaction) => sum + Number(transaction.amount),
-    0
-  );
+const selectedMonthExpense = useMemo(
+  () => getTransactionTotals(selectedMonthTransactions).expense,
+  [selectedMonthTransactions]
+);
 
 const selectedMonthBudgetPercent =
   monthlyBudgetLimit > 0
     ? Math.round((selectedMonthExpense / monthlyBudgetLimit) * 100)
     : 0;
+const budgetStatus = getBudgetStatus(selectedMonthBudgetPercent);
 
-const budgetStatus =
-  selectedMonthBudgetPercent >= 100
-    ? {
-        label: "Nguy hiểm",
-        message: "Bạn đã chi tiêu vượt ngân sách tháng!",
-        className: "danger",
-      }
-    : selectedMonthBudgetPercent >= 80
-    ? {
-        label: "Cảnh báo",
-        message: "Sắp đạt giới hạn ngân sách!",
-        className: "warning",
-      }
-    : {
-        label: "An toàn",
-        message: "Chi tiêu hiện tại vẫn nằm trong mức an toàn.",
-        className: "safe",
-      };
-
-const monthlyData = Object.values(
-  transactions.reduce((result, transaction) => {
-    const transactionDate = new Date(transaction.date);
-
-    if (Number.isNaN(transactionDate.getTime())) {
-      return result;
-    }
-
-    const monthKey = `${transactionDate.getFullYear()}-${String(
-      transactionDate.getMonth() + 1
-    ).padStart(2, "0")}`;
-
-    const monthLabel = `T${String(
-      transactionDate.getMonth() + 1
-    ).padStart(2, "0")}/${transactionDate.getFullYear()}`;
-
-    if (!result[monthKey]) {
-      result[monthKey] = {
-        monthKey,
-        month: monthLabel,
-        income: 0,
-        expense: 0,
-      };
-    }
-
-    if (transaction.type === "income") {
-      result[monthKey].income += Number(transaction.amount);
-    }
-
-    if (transaction.type === "expense") {
-      result[monthKey].expense += Number(transaction.amount);
-    }
-
-    return result;
-  }, {})
-)
-  .sort((firstMonth, secondMonth) =>
-    firstMonth.monthKey.localeCompare(secondMonth.monthKey)
-  )
-  .slice(-6)
-  .map((monthData) => ({
-    month: monthData.month,
-    income: monthData.income,
-    expense: monthData.expense,
-  }));
-
-  const expenseCategoryData = Object.values(
-  dashboardTransactions
-    .filter((transaction) => transaction.type === "expense")
-    .reduce((result, transaction) => {
-      if (!result[transaction.category]) {
-        result[transaction.category] = {
-          name: transaction.category,
-          value: 0,
-        };
-      }
-
-      result[transaction.category].value += Number(transaction.amount);
-      return result;
-    }, {})
+const monthlyData = useMemo(
+  () => buildMonthlyData(transactions, selectedMonth, 6),
+  [selectedMonth, transactions]
 );
 
-  const categories = [
-  ...new Set(
-    dashboardTransactions.map(
-      (transaction) => transaction.category
-    )
-  ),
-].sort((firstCategory, secondCategory) =>
-  firstCategory.localeCompare(secondCategory, "vi")
+const expenseCategoryData = useMemo(
+  () =>
+    Object.values(
+      dashboardTransactions
+        .filter((transaction) => transaction.type === "expense")
+        .reduce((result, transaction) => {
+          if (!result[transaction.category]) {
+            result[transaction.category] = {
+              name: transaction.category,
+              value: 0,
+            };
+          }
+
+          result[transaction.category].value += Number(transaction.amount);
+          return result;
+        }, {})
+    ),
+  [dashboardTransactions]
 );
 
-function normalizeText(text) {
-  return String(text)
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/đ/g, "d")
-    .replace(/Đ/g, "D")
-    .toLowerCase();
-}
+const categories = useMemo(
+  () =>
+    [
+      ...new Set(
+        dashboardTransactions.map((transaction) => transaction.category)
+      ),
+    ].sort((firstCategory, secondCategory) =>
+      firstCategory.localeCompare(secondCategory, "vi")
+    ),
+  [dashboardTransactions]
+);
 
-const normalizedSearchTerm = normalizeText(searchTerm.trim());
+const filteredTransactions = useMemo(
+  () =>
+    filterTransactions(dashboardTransactions, {
+      searchTerm,
+      type: typeFilter,
+      category: categoryFilter,
+    }),
+  [categoryFilter, dashboardTransactions, searchTerm, typeFilter]
+);
 
-const filteredTransactions = dashboardTransactions
-  .filter((transaction) => {
-    const searchableText = normalizeText(
-      `${transaction.title} ${transaction.note} ${transaction.category}`
-    );
-
-    const matchesSearch =
-      !normalizedSearchTerm ||
-      searchableText.includes(normalizedSearchTerm);
-
-    const matchesType =
-      typeFilter === "all" ||
-      transaction.type === typeFilter;
-
-    const matchesCategory =
-      categoryFilter === "all" ||
-      transaction.category === categoryFilter;
-
-    return matchesSearch && matchesType && matchesCategory;
-  })
-  .sort(
-    (firstTransaction, secondTransaction) =>
-      new Date(secondTransaction.date) -
-      new Date(firstTransaction.date)
-  );
-
-  function closeForm() {
+function closeForm() {
   setIsFormOpen(false);
   setEditingTransaction(null);
 }
@@ -983,7 +871,7 @@ async function handleExportTransactions() {
 }
 
 async function handleSaveBudget() {
-  const budgetAmount = Number(budgetInput);
+  const budgetAmount = parseCurrencyInput(budgetInput);
 
   if (!selectedMonth) {
     toast.error("Bạn cần chọn tháng trước khi lưu ngân sách.");
@@ -1036,10 +924,19 @@ if (isAuthLoading) {
   return (
     <main className="loading-screen">
       <div className="loading-card">
-        <div className="brand-logo">₫</div>
+        <Brand compact subtitle="" />
         <p>Đang tải MoneyFlow...</p>
       </div>
     </main>
+  );
+}
+
+if (isPasswordRecovery) {
+  return (
+    <AuthPage
+      recoveryMode
+      onRecoveryComplete={() => setIsPasswordRecovery(false)}
+    />
   );
 }
 
@@ -1070,6 +967,7 @@ if (!session) {
 
 <select
   className="month-button"
+  aria-label="Chọn tháng tổng quan"
   value={selectedMonth}
   onChange={(event) => setSelectedMonth(event.target.value)}
 >
@@ -1154,19 +1052,30 @@ if (!session) {
     : "Chưa thiết lập ngân sách cho tháng này"}
 </span>
 <div className="budget-editor">
-  <input
-    type="number"
-    min="1"
-    value={budgetInput}
-    onChange={(event) => setBudgetInput(event.target.value)}
-    placeholder="Nhập ngân sách tháng"
-  />
+	  <input
+	    type="text"
+	    inputMode="numeric"
+	    value={formatCurrencyInput(budgetInput)}
+	    onChange={(event) =>
+        setBudgetInput(sanitizeCurrencyInput(event.target.value))
+      }
+	    placeholder="Ví dụ: 10.000.000"
+      aria-label="Ngân sách tháng"
+	  />
 
   <button type="button" onClick={handleSaveBudget}>
     Lưu ngân sách
   </button>
 </div>
-              <div className="progress-track">
+              <div
+                className="progress-track"
+                role="progressbar"
+                aria-label="Mức sử dụng ngân sách tháng"
+                aria-valuemin="0"
+                aria-valuemax="100"
+                aria-valuenow={Math.min(selectedMonthBudgetPercent, 100)}
+                aria-valuetext={`${selectedMonthBudgetPercent}% ngân sách đã sử dụng`}
+              >
                 <div
                   className={`progress-value ${budgetStatus.className}`}
                   style={{
@@ -1240,12 +1149,14 @@ if (!session) {
             <label>
               Ngân sách (VND)
               <input
-                type="number"
-                min="1"
+                type="text"
+                inputMode="numeric"
                 autoFocus
-                value={budgetInput}
-                onChange={(event) => setBudgetInput(event.target.value)}
-                placeholder="Ví dụ: 5000000"
+                value={formatCurrencyInput(budgetInput)}
+                onChange={(event) =>
+                  setBudgetInput(sanitizeCurrencyInput(event.target.value))
+                }
+                placeholder="Ví dụ: 5.000.000"
               />
             </label>
             <button className="primary-button" type="button" onClick={handleSaveBudget}>

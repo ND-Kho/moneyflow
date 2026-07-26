@@ -1,31 +1,28 @@
+import Brand from "./Brand";
+import Icon from "./Icon";
+
 const menuItems = [
-  { id: "overview", icon: "▦", label: "Tổng quan" },
-  { id: "transactions", icon: "↕", label: "Giao dịch" },
-  { id: "budget", icon: "◎", label: "Ngân sách" },
-  { id: "statistics", icon: "◷", label: "Thống kê" },
+  { id: "overview", icon: "overview", label: "Tổng quan" },
+  { id: "transactions", icon: "transactions", label: "Giao dịch" },
+  { id: "budget", icon: "budget", label: "Ngân sách" },
+  { id: "statistics", icon: "statistics", label: "Thống kê" },
 ];
 
 function Sidebar({ userEmail, onLogout, onNavigate, activeSection }) {
   return (
     <aside className="sidebar">
-      <div className="sidebar-brand">
-        <div className="brand-logo">₫</div>
+      <Brand className="sidebar-brand" />
 
-        <div>
-          <h2>MoneyFlow</h2>
-          <p>Quản lý tài chính</p>
-        </div>
-      </div>
-
-      <nav className="sidebar-nav">
+      <nav className="sidebar-nav" aria-label="Điều hướng chính">
         {menuItems.map((item) => (
           <button
             key={item.id}
             type="button"
             className={`nav-item ${activeSection === item.id ? "active" : ""}`}
             onClick={() => onNavigate(item.id)}
+            aria-current={activeSection === item.id ? "page" : undefined}
           >
-            <span>{item.icon}</span>
+            <Icon name={item.icon} />
             <span>{item.label}</span>
           </button>
         ))}
@@ -36,7 +33,7 @@ function Sidebar({ userEmail, onLogout, onNavigate, activeSection }) {
           onClick={onLogout}
           aria-label="Đăng xuất"
         >
-          <span>⇥</span>
+          <Icon name="logout" />
           <span>Đăng xuất</span>
         </button>
       </nav>
